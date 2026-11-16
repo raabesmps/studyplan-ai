@@ -124,6 +124,9 @@ export default function StudyPlanDisplay({
           className="bg-slate-900/50 rounded-lg p-6 text-slate-200 leading-relaxed whitespace-pre-wrap"
           dangerouslySetInnerHTML={{
             __html: plan
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
               .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>')
               .replace(/\*(.*?)\*/g, '<em class="text-slate-300">$1</em>')
               .replace(/^### (.*$)/gim, '<h3 class="text-xl font-bold text-white mt-6 mb-3">$1</h3>')
