@@ -1,20 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { BookOpen, Clock, Calendar, Sparkles, GraduationCap, Languages } from 'lucide-react';
-import { LEVELS, LANGUAGES, SUBJECT_MAX_LENGTH, type Language, type Level, type PlanRequest } from '@/lib/schema';
-
-const LEVEL_LABELS: Record<Level, string> = {
-  beginner: 'Iniciante',
-  intermediate: 'Intermediário',
-  advanced: 'Avançado',
-};
-
-const LANGUAGE_LABELS: Record<Language, string> = {
-  pt: 'Português',
-  en: 'English',
-};
+import { RotateCw, Sparkles } from 'lucide-react';
+import { LANGUAGES, LEVELS, SUBJECT_MAX_LENGTH, type Language, type Level, type PlanRequest } from '@/lib/schema';
+import { useT } from '@/lib/use-locale';
 
 interface StudyPlanFormProps {
   onGenerate: (input: PlanRequest) => void;
@@ -22,11 +11,14 @@ interface StudyPlanFormProps {
 }
 
 export default function StudyPlanForm({ onGenerate, loading }: StudyPlanFormProps) {
+  const { t, locale } = useT();
   const [subject, setSubject] = useState('');
   const [hoursPerDay, setHoursPerDay] = useState(1);
   const [days, setDays] = useState(7);
   const [level, setLevel] = useState<Level>('beginner');
-  const [language, setLanguage] = useState<Language>('pt');
+  // Until the learner picks one, the plan follows the interface language.
+  const [languageChoice, setLanguageChoice] = useState<Language | null>(null);
+  const language = languageChoice ?? locale;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,25 +28,13 @@ export default function StudyPlanForm({ onGenerate, loading }: StudyPlanFormProp
   };
 
   return (
-    <motion.form
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      onSubmit={handleSubmit}
-      className="bg-slate-800/50 backdrop-blur-lg rounded-2xl p-5 sm:p-8 border border-slate-700 shadow-2xl"
-    >
-      <div className="flex items-center gap-3 mb-6">
-        <div className="p-3 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl">
-          <Sparkles className="w-6 h-6 text-white" />
-        </div>
-        <h2 className="text-2xl font-bold text-white">Criar Plano de Estudos</h2>
-      </div>
+    <form onSubmit={handleSubmit} className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+      <h2 className="text-xl font-extrabold tracking-tight">{t.form.title}</h2>
 
-      <div className="space-y-6">
+      <div className="mt-5 space-y-4">
         <div>
-          <label htmlFor="subject" className="flex items-center gap-2 text-slate-300 mb-2">
-            <BookOpen className="w-5 h-5 text-blue-400" />
-            <span className="font-semibold">O que você quer aprender?</span>
+          <label htmlFor="subject" className="mb-1.5 block font-semibold">
+            {t.form.subject}
           </label>
           <input
             id="subject"
@@ -62,18 +42,17 @@ export default function StudyPlanForm({ onGenerate, loading }: StudyPlanFormProp
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
             maxLength={SUBJECT_MAX_LENGTH}
-            placeholder="Ex: NestJS, React, Python, Machine Learning..."
-            className="w-full px-4 py-3 bg-slate-700/50 border border-slate-500 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+            placeholder={t.form.subjectPlaceholder}
+            className="field text-lg"
             required
             disabled={loading}
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-2 gap-4">
           <div>
-            <label htmlFor="hours" className="flex items-center gap-2 text-slate-300 mb-2">
-              <Clock className="w-5 h-5 text-green-400" />
-              <span className="font-semibold">Horas por dia</span>
+            <label htmlFor="hours" className="mb-1.5 block font-semibold">
+              {t.form.hours}
             </label>
             <input
               id="hours"
@@ -82,16 +61,14 @@ export default function StudyPlanForm({ onGenerate, loading }: StudyPlanFormProp
               max="24"
               value={hoursPerDay}
               onChange={(e) => setHoursPerDay(Number(e.target.value))}
-              className="w-full px-4 py-3 bg-slate-700/50 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
+              className="field"
               required
               disabled={loading}
             />
           </div>
-
           <div>
-            <label htmlFor="days" className="flex items-center gap-2 text-slate-300 mb-2">
-              <Calendar className="w-5 h-5 text-purple-400" />
-              <span className="font-semibold">Duração (dias)</span>
+            <label htmlFor="days" className="mb-1.5 block font-semibold">
+              {t.form.days}
             </label>
             <input
               id="days"
@@ -100,79 +77,66 @@ export default function StudyPlanForm({ onGenerate, loading }: StudyPlanFormProp
               max="30"
               value={days}
               onChange={(e) => setDays(Number(e.target.value))}
-              className="w-full px-4 py-3 bg-slate-700/50 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+              className="field"
               required
               disabled={loading}
             />
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-2 gap-4">
           <div>
-            <label htmlFor="level" className="flex items-center gap-2 text-slate-300 mb-2">
-              <GraduationCap className="w-5 h-5 text-amber-400" />
-              <span className="font-semibold">Seu nível atual</span>
+            <label htmlFor="level" className="mb-1.5 block font-semibold">
+              {t.form.level}
             </label>
             <select
               id="level"
               value={level}
               onChange={(e) => setLevel(e.target.value as Level)}
-              className="w-full px-4 py-3 bg-slate-700/50 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all"
+              className="field"
               disabled={loading}
             >
               {LEVELS.map((l) => (
                 <option key={l} value={l}>
-                  {LEVEL_LABELS[l]}
+                  {t.levels[l]}
                 </option>
               ))}
             </select>
           </div>
-
           <div>
-            <label htmlFor="language" className="flex items-center gap-2 text-slate-300 mb-2">
-              <Languages className="w-5 h-5 text-pink-400" />
-              <span className="font-semibold">Idioma do plano</span>
+            <label htmlFor="language" className="mb-1.5 block font-semibold">
+              {t.form.planLanguage}
             </label>
             <select
               id="language"
               value={language}
-              onChange={(e) => setLanguage(e.target.value as Language)}
-              className="w-full px-4 py-3 bg-slate-700/50 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-pink-500 transition-all"
+              onChange={(e) => setLanguageChoice(e.target.value as Language)}
+              className="field"
               disabled={loading}
             >
               {LANGUAGES.map((l) => (
                 <option key={l} value={l}>
-                  {LANGUAGE_LABELS[l]}
+                  {t.languages[l]}
                 </option>
               ))}
             </select>
           </div>
         </div>
 
-        <motion.button
-          type="submit"
-          disabled={loading || !subject.trim()}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg shadow-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-        >
+        <button type="submit" disabled={loading || !subject.trim()} className="btn btn-primary w-full text-base">
           {loading ? (
             <>
-              <motion.span
-                animate={{ rotate: 360 }}
-                transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
-                className="inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full"
-              />
-              Gerando plano...
+              <RotateCw className="h-5 w-5 animate-spin" aria-hidden="true" />
+              {t.form.submitting}
             </>
           ) : (
             <>
-              <Sparkles className="w-5 h-5" />
-              Gerar Plano de Estudos
+              <Sparkles className="h-5 w-5" aria-hidden="true" />
+              {t.form.submit}
             </>
           )}
-        </motion.button>
+        </button>
       </div>
-    </motion.form>
+    </form>
   );
 }
