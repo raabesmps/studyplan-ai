@@ -2,10 +2,22 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { BookOpen, Clock, Calendar, Sparkles } from 'lucide-react';
+import { BookOpen, Clock, Calendar, Sparkles, GraduationCap, Languages } from 'lucide-react';
+import { LEVELS, LANGUAGES, SUBJECT_MAX_LENGTH, type Language, type Level, type PlanRequest } from '@/lib/schema';
+
+const LEVEL_LABELS: Record<Level, string> = {
+  beginner: 'Iniciante',
+  intermediate: 'Intermediário',
+  advanced: 'Avançado',
+};
+
+const LANGUAGE_LABELS: Record<Language, string> = {
+  pt: 'Português',
+  en: 'English',
+};
 
 interface StudyPlanFormProps {
-  onGenerate: (subject: string, hoursPerDay: number, days: number) => void;
+  onGenerate: (input: PlanRequest) => void;
   loading: boolean;
 }
 
@@ -13,11 +25,13 @@ export default function StudyPlanForm({ onGenerate, loading }: StudyPlanFormProp
   const [subject, setSubject] = useState('');
   const [hoursPerDay, setHoursPerDay] = useState(1);
   const [days, setDays] = useState(7);
+  const [level, setLevel] = useState<Level>('beginner');
+  const [language, setLanguage] = useState<Language>('pt');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (subject.trim() && hoursPerDay > 0) {
-      onGenerate(subject.trim(), hoursPerDay, days);
+      onGenerate({ subject: subject.trim(), hoursPerDay, days, level, language });
     }
   };
 
@@ -47,6 +61,7 @@ export default function StudyPlanForm({ onGenerate, loading }: StudyPlanFormProp
             type="text"
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
+            maxLength={SUBJECT_MAX_LENGTH}
             placeholder="Ex: NestJS, React, Python, Machine Learning..."
             className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
             required
@@ -89,6 +104,48 @@ export default function StudyPlanForm({ onGenerate, loading }: StudyPlanFormProp
               required
               disabled={loading}
             />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label htmlFor="level" className="flex items-center gap-2 text-slate-300 mb-2">
+              <GraduationCap className="w-5 h-5 text-amber-400" />
+              <span className="font-semibold">Seu nível atual</span>
+            </label>
+            <select
+              id="level"
+              value={level}
+              onChange={(e) => setLevel(e.target.value as Level)}
+              className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all"
+              disabled={loading}
+            >
+              {LEVELS.map((l) => (
+                <option key={l} value={l}>
+                  {LEVEL_LABELS[l]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="language" className="flex items-center gap-2 text-slate-300 mb-2">
+              <Languages className="w-5 h-5 text-pink-400" />
+              <span className="font-semibold">Idioma do plano</span>
+            </label>
+            <select
+              id="language"
+              value={language}
+              onChange={(e) => setLanguage(e.target.value as Language)}
+              className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-pink-500 transition-all"
+              disabled={loading}
+            >
+              {LANGUAGES.map((l) => (
+                <option key={l} value={l}>
+                  {LANGUAGE_LABELS[l]}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 

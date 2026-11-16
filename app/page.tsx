@@ -8,6 +8,7 @@ import StudyPlanDisplay from '@/components/StudyPlanDisplay';
 import SavedPlans from '@/components/SavedPlans';
 import { logger } from '@/lib/logger';
 import { planToMarkdown } from '@/lib/export';
+import type { PlanRequest } from '@/lib/schema';
 
 export default function Home() {
   const [loading, setLoading] = useState(false);
@@ -19,7 +20,8 @@ export default function Home() {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleGenerate = async (subject: string, hoursPerDay: number, days: number) => {
+  const handleGenerate = async (input: PlanRequest) => {
+    const { subject, hoursPerDay, days, language } = input;
     setLoading(true);
     setError(null);
     setPlan(null);
@@ -31,7 +33,7 @@ export default function Home() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ subject, hoursPerDay, days }),
+        body: JSON.stringify(input),
       });
 
       const data = await response.json();
@@ -41,7 +43,7 @@ export default function Home() {
       }
 
       // Temporary bridge until the card UI replaces markdown rendering.
-      setPlan(planToMarkdown(data.plan));
+      setPlan(planToMarkdown(data.plan, language));
       setPlanData({ subject, hoursPerDay, days });
     } catch (err: unknown) {
       logger.error('Generate request failed:', err);
