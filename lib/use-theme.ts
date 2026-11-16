@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from 'react';
+import { THEME_STORAGE_KEY } from './theme-storage';
 
 export type Theme = 'light' | 'dark';
 
-export const THEME_STORAGE_KEY = 'studyplan-ai:theme';
 const CHANGE_EVENT = 'studyplan-ai:theme';
 const DARK_QUERY = '(prefers-color-scheme: dark)';
 
