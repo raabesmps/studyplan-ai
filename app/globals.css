@@ -216,6 +216,49 @@ body {
   animation-delay: calc(var(--i, 0) * 70ms);
 }
 
+/*
+  Print / "Save as PDF": always black on white regardless of the chosen theme, keep the
+  highlighter swipes and progress fills (browsers drop backgrounds unless told otherwise),
+  and let the checkboxes act as a paper checklist. Layout chrome is hidden with print:hidden.
+*/
+@media print {
+  :root {
+    color-scheme: light !important;
+    --paper: #ffffff !important;
+    --surface: #ffffff !important;
+    --ink: #000000 !important;
+    --muted: #333333 !important;
+    --line: #bbbbbb !important;
+    --edge: #555555 !important;
+    --pen: #000000 !important;
+    --mark: #ffe14d !important;
+    --mark-soft: #ffe14d !important;
+    --on-mark: #11141c !important;
+    --fill: #000000 !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body {
+    background: #ffffff !important;
+  }
+
+  .reveal {
+    animation: none !important;
+  }
+
+  .skip-link {
+    display: none !important;
+  }
+
+  a {
+    text-decoration: underline;
+  }
+}
+
 /* Respect the OS "reduce motion" setting for CSS transitions and animations. */
 @media (prefers-reduced-motion: reduce) {
   *,

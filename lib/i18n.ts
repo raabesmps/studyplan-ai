@@ -39,6 +39,15 @@ const pt = {
     autosaved: 'Salvo automaticamente neste navegador.',
     close: 'Fechar plano',
   },
+  export: {
+    markdown: 'Baixar .md',
+    print: 'Salvar como PDF',
+    calendar: 'Adicionar ao calendário',
+    startDate: 'Primeiro dia',
+    startTime: 'Horário',
+    download: 'Baixar arquivo .ics',
+    help: 'Cria um evento por dia, no horário escolhido, com a duração estimada. Importe o arquivo no Google Agenda ou no app Calendário da Apple.',
+  },
   progress: {
     label: 'Progresso do plano',
     summary: (done: number, total: number) =>
@@ -124,6 +133,15 @@ const en: Messages = {
     copied: 'Copied!',
     autosaved: 'Saved automatically in this browser.',
     close: 'Close plan',
+  },
+  export: {
+    markdown: 'Download .md',
+    print: 'Save as PDF',
+    calendar: 'Add to calendar',
+    startDate: 'First day',
+    startTime: 'Time',
+    download: 'Download .ics file',
+    help: 'Creates one event per day at the chosen time, using the estimated duration. Import the file into Google Calendar or the Apple Calendar app.',
   },
   progress: {
     label: 'Plan progress',

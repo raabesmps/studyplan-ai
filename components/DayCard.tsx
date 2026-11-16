@@ -37,7 +37,7 @@ export default function DayCard({
 
   return (
     <li
-      className="reveal grid grid-cols-[2.25rem_minmax(0,1fr)] gap-x-3 sm:grid-cols-[2.5rem_minmax(0,1fr)] sm:gap-x-5"
+      className="reveal grid grid-cols-[2.25rem_minmax(0,1fr)] gap-x-3 sm:grid-cols-[2.5rem_minmax(0,1fr)] sm:gap-x-5 print:break-inside-avoid"
       style={{ '--i': index } as CSSProperties}
     >
       <div className="relative flex justify-center" aria-hidden="true">

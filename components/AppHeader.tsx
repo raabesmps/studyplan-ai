@@ -33,7 +33,7 @@ export default function AppHeader() {
   }, [locale]);
 
   return (
-    <header className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
+    <header className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6 print:hidden">
       <div className="flex items-center gap-2.5 text-xl font-extrabold tracking-tight">
         <Logo />
         StudyPlan AI

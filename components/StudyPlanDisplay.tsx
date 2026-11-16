@@ -1,10 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { Calendar, Check, Clock, Copy, GraduationCap, X } from 'lucide-react';
+import { Calendar, Clock, GraduationCap, X } from 'lucide-react';
 import DayCard from './DayCard';
+import ExportActions from './ExportActions';
 import ProgressBar from './ProgressBar';
-import { planToMarkdown } from '@/lib/export';
 import { isDayComplete, toggleDay, toggleExercise } from '@/lib/progress';
 import { updateProgress, type SavedPlan } from '@/lib/plans-store';
 import type { Day } from '@/lib/schema';
@@ -17,18 +16,7 @@ interface StudyPlanDisplayProps {
 
 export default function StudyPlanDisplay({ saved, onClose }: StudyPlanDisplayProps) {
   const { t } = useT();
-  const [copied, setCopied] = useState(false);
   const { plan, completed } = saved;
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(planToMarkdown(plan, saved.language));
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard can be blocked; nothing else to do.
-    }
-  };
 
   const onToggleExercise = (day: Day, index: number) =>
     updateProgress(saved.id, toggleExercise(completed, day, index));
@@ -48,7 +36,7 @@ export default function StudyPlanDisplay({ saved, onClose }: StudyPlanDisplayPro
             type="button"
             onClick={onClose}
             aria-label={t.plan.close}
-            className="grid h-10 w-10 shrink-0 place-content-center rounded-lg border-[1.5px] border-edge bg-surface hover:border-ink"
+            className="grid h-10 w-10 shrink-0 place-content-center rounded-lg border-[1.5px] border-edge bg-surface hover:border-ink print:hidden"
           >
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
@@ -72,20 +60,8 @@ export default function StudyPlanDisplay({ saved, onClose }: StudyPlanDisplayPro
 
       <div className="mt-6 rounded-xl border border-line bg-surface p-4 sm:p-5">
         <ProgressBar days={plan.days.map((d) => isDayComplete(completed, d))} />
-        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-          <button type="button" onClick={handleCopy} className="btn btn-secondary px-3.5 py-2 text-sm">
-            {copied ? (
-              <>
-                <Check className="h-4 w-4" aria-hidden="true" />
-                {t.plan.copied}
-              </>
-            ) : (
-              <>
-                <Copy className="h-4 w-4" aria-hidden="true" />
-                {t.plan.copy}
-              </>
-            )}
-          </button>
+        <div className="mt-4 space-y-3 print:hidden">
+          <ExportActions saved={saved} />
           <p className="text-sm text-muted">{t.plan.autosaved}</p>
         </div>
       </div>

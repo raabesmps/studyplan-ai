@@ -115,7 +115,7 @@ export default function Home() {
       <AppHeader />
 
       <main id="main" className="mx-auto max-w-6xl px-4 pb-16 sm:px-6">
-        <div className="mb-8 max-w-3xl sm:mb-12">
+        <div className="mb-8 max-w-3xl sm:mb-12 print:hidden">
           <h1 className="text-balance text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-6xl">
             {t.hero.title}
           </h1>
@@ -123,7 +123,7 @@ export default function Home() {
         </div>
 
         <div className="grid gap-x-12 gap-y-10 lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-start">
-          <div className="lg:col-start-1 lg:row-start-1">
+          <div className="lg:col-start-1 lg:row-start-1 print:hidden">
             <StudyPlanForm onGenerate={handleGenerate} loading={loading} />
           </div>
 
@@ -135,7 +135,7 @@ export default function Home() {
             {errorKind && (
               <div
                 role="alert"
-                className="mb-8 flex flex-wrap items-center justify-between gap-3 rounded-xl border-[1.5px] border-danger bg-surface p-4"
+                className="mb-8 flex flex-wrap items-center justify-between gap-3 rounded-xl border-[1.5px] border-danger bg-surface p-4 print:hidden"
               >
                 <p className="min-w-0 flex-1 font-semibold">{t.errors[errorKind]}</p>
                 {lastInput && (
@@ -165,7 +165,7 @@ export default function Home() {
             )}
           </div>
 
-          <div className="lg:col-start-1 lg:row-start-2">
+          <div className="lg:col-start-1 lg:row-start-2 print:hidden">
             <SavedPlans
               plans={plans}
               legacy={legacy}
@@ -177,7 +177,7 @@ export default function Home() {
         </div>
       </main>
 
-      <footer className="mx-auto max-w-6xl px-4 pb-10 text-sm text-muted sm:px-6">
+      <footer className="mx-auto max-w-6xl px-4 pb-10 text-sm text-muted sm:px-6 print:hidden">
         <a
           href="https://ai.google.dev/"
           target="_blank"
