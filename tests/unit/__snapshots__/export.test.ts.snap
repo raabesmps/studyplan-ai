@@ -1,0 +1,107 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`planToIcs > matches the snapshot 1`] = `
+"BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//StudyPlan AI//Study plan//EN
+CALSCALE:GREGORIAN
+X-WR-CALNAME:SQL joins
+BEGIN:VEVENT
+UID:plan-123-day-1@studyplan-ai
+DTSTAMP:20261116T120000Z
+DTSTART:20261201T081500
+DTEND:20261201T094500
+SUMMARY:SQL joins - Dia 1/2: Dia 1: junções
+DESCRIPTION:Objetivo: Entender junções no dia 1.\\n\\nExercícios:\\n- Liste
+  pedidos com o cliente\\n- Encontre clientes sem pedidos
+END:VEVENT
+BEGIN:VEVENT
+UID:plan-123-day-2@studyplan-ai
+DTSTAMP:20261116T120000Z
+DTSTART:20261202T081500
+DTEND:20261202T094500
+SUMMARY:SQL joins - Dia 2/2: Dia 2: junções
+DESCRIPTION:Objetivo: Entender junções no dia 2.\\n\\nExercícios:\\n- Liste
+  pedidos com o cliente\\n- Encontre clientes sem pedidos
+END:VEVENT
+END:VCALENDAR
+"
+`;
+
+exports[`planToMarkdown > matches the snapshot (en, with progress) 1`] = `
+"# SQL joins
+
+## Day 1: Dia 1: junções
+
+**Objective:** Entender junções no dia 1.
+
+**Topics:**
+- INNER JOIN
+- LEFT JOIN
+
+**Exercises:**
+- [x] Liste pedidos com o cliente
+- [x] Encontre clientes sem pedidos
+
+**Search:**
+- Guia de joins: sql joins explicados
+
+**Duration:** 90 min
+
+## Day 2: Dia 2: junções
+
+**Objective:** Entender junções no dia 2.
+
+**Topics:**
+- INNER JOIN
+- LEFT JOIN
+
+**Exercises:**
+- [ ] Liste pedidos com o cliente
+- [x] Encontre clientes sem pedidos
+
+**Search:**
+- Guia de joins: sql joins explicados
+
+**Duration:** 90 min
+"
+`;
+
+exports[`planToMarkdown > matches the snapshot (pt, nothing done) 1`] = `
+"# SQL joins
+
+## Dia 1: Dia 1: junções
+
+**Objetivo:** Entender junções no dia 1.
+
+**Tópicos:**
+- INNER JOIN
+- LEFT JOIN
+
+**Exercícios:**
+- [ ] Liste pedidos com o cliente
+- [ ] Encontre clientes sem pedidos
+
+**Buscar:**
+- Guia de joins: sql joins explicados
+
+**Duração:** 90 min
+
+## Dia 2: Dia 2: junções
+
+**Objetivo:** Entender junções no dia 2.
+
+**Tópicos:**
+- INNER JOIN
+- LEFT JOIN
+
+**Exercícios:**
+- [ ] Liste pedidos com o cliente
+- [ ] Encontre clientes sem pedidos
+
+**Buscar:**
+- Guia de joins: sql joins explicados
+
+**Duração:** 90 min
+"
+`;
