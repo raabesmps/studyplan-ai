@@ -6,7 +6,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "StudyPlan AI - Plano de Estudos Personalizado",
-  description: "Crie um plano de estudos de 7 dias baseado em qualquer assunto que você queira aprender",
+  description: "Crie um plano de estudos de 1 a 30 dias, com checklist de progresso, sobre qualquer assunto que você queira aprender",
 };
 
 export default function RootLayout({

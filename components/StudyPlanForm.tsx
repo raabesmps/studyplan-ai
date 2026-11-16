@@ -41,7 +41,7 @@ export default function StudyPlanForm({ onGenerate, loading }: StudyPlanFormProp
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
       onSubmit={handleSubmit}
-      className="bg-slate-800/50 backdrop-blur-lg rounded-2xl p-8 border border-slate-700 shadow-2xl"
+      className="bg-slate-800/50 backdrop-blur-lg rounded-2xl p-5 sm:p-8 border border-slate-700 shadow-2xl"
     >
       <div className="flex items-center gap-3 mb-6">
         <div className="p-3 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl">
@@ -63,7 +63,7 @@ export default function StudyPlanForm({ onGenerate, loading }: StudyPlanFormProp
             onChange={(e) => setSubject(e.target.value)}
             maxLength={SUBJECT_MAX_LENGTH}
             placeholder="Ex: NestJS, React, Python, Machine Learning..."
-            className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+            className="w-full px-4 py-3 bg-slate-700/50 border border-slate-500 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
             required
             disabled={loading}
           />
@@ -82,7 +82,7 @@ export default function StudyPlanForm({ onGenerate, loading }: StudyPlanFormProp
               max="24"
               value={hoursPerDay}
               onChange={(e) => setHoursPerDay(Number(e.target.value))}
-              className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
+              className="w-full px-4 py-3 bg-slate-700/50 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
               required
               disabled={loading}
             />
@@ -100,7 +100,7 @@ export default function StudyPlanForm({ onGenerate, loading }: StudyPlanFormProp
               max="30"
               value={days}
               onChange={(e) => setDays(Number(e.target.value))}
-              className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+              className="w-full px-4 py-3 bg-slate-700/50 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
               required
               disabled={loading}
             />
@@ -117,7 +117,7 @@ export default function StudyPlanForm({ onGenerate, loading }: StudyPlanFormProp
               id="level"
               value={level}
               onChange={(e) => setLevel(e.target.value as Level)}
-              className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all"
+              className="w-full px-4 py-3 bg-slate-700/50 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all"
               disabled={loading}
             >
               {LEVELS.map((l) => (
@@ -137,7 +137,7 @@ export default function StudyPlanForm({ onGenerate, loading }: StudyPlanFormProp
               id="language"
               value={language}
               onChange={(e) => setLanguage(e.target.value as Language)}
-              className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-pink-500 transition-all"
+              className="w-full px-4 py-3 bg-slate-700/50 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-pink-500 transition-all"
               disabled={loading}
             >
               {LANGUAGES.map((l) => (
