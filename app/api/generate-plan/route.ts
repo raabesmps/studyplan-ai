@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateStudyPlan } from '@/lib/gemini';
+import { logger } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,13 +28,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`🚀 Gerando plano de estudos: ${subject} - ${hoursPerDay}h/dia - ${planDays} dias`);
+    logger.info(`Generating plan: ${subject} - ${hoursPerDay}h/day - ${planDays} days`);
 
     const plan = await generateStudyPlan(subject, hoursPerDay, planDays);
 
     return NextResponse.json({ plan });
   } catch (error: unknown) {
-    console.error('❌ Erro ao gerar plano:', error);
+    logger.error('Failed to generate plan:', error);
     
     const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
     

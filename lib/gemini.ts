@@ -1,7 +1,13 @@
+import { logger } from './logger';
+
 const API_KEY = process.env.GEMINI_API_KEY;
 
 if (!API_KEY) {
   throw new Error('GEMINI_API_KEY não está configurada. Verifique seu arquivo .env.local');
+}
+
+interface ModelListResponse {
+  models?: { name: string; supportedGenerationMethods?: string[] }[];
 }
 
 // Função para listar modelos disponíveis
@@ -12,18 +18,18 @@ async function listAvailableModels(): Promise<string[]> {
     );
     
     if (!response.ok) {
-      console.warn('⚠️ Não foi possível listar modelos. Usando lista padrão.');
+      logger.warn('Could not list models, using default list.');
       return ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
     }
-    
-    const data = await response.json();
-    const models = data.models
-      ?.filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
-      ?.map((m: any) => m.name.replace('models/', '')) || [];
-    
+
+    const data: ModelListResponse = await response.json();
+    const models = (data.models ?? [])
+      .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
+      .map((m) => m.name.replace('models/', ''));
+
     return models.length > 0 ? models : ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
-  } catch (error) {
-    console.warn('⚠️ Erro ao listar modelos. Usando lista padrão.');
+  } catch {
+    logger.warn('Error listing models, using default list.');
     return ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
   }
 }
@@ -100,13 +106,13 @@ Gere APENAS o plano de estudos, sem explicações adicionais.`;
   
   for (const modelName of modelsToTry) {
     try {
-      console.log(`🔄 Tentando modelo: ${modelName}`);
+      logger.info(`Trying model: ${modelName}`);
       const result = await generateWithModel(modelName, prompt);
-      console.log(`✅ Modelo ${modelName} funcionou!`);
+      logger.info(`Model ${modelName} succeeded`);
       return result;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-      console.warn(`⚠️ Modelo ${modelName} falhou: ${errorMessage}`);
+      logger.warn(`Model ${modelName} failed: ${errorMessage}`);
       lastError = error instanceof Error ? error : new Error(errorMessage);
       // Tenta o próximo modelo
       continue;

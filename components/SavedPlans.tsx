@@ -12,13 +12,14 @@ export default function SavedPlans() {
   const [plans, setPlans] = useState<StudyPlan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<StudyPlan | null>(null);
 
-  useEffect(() => {
-    loadPlans();
-  }, []);
-
   const loadPlans = () => {
     setPlans(getPlans());
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is only readable on the client
+    loadPlans();
+  }, []);
 
   const handleDelete = (id: string) => {
     if (confirm('Tem certeza que deseja excluir este plano?')) {

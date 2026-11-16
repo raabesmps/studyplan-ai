@@ -6,6 +6,7 @@ import { Sparkles } from 'lucide-react';
 import StudyPlanForm from '@/components/StudyPlanForm';
 import StudyPlanDisplay from '@/components/StudyPlanDisplay';
 import SavedPlans from '@/components/SavedPlans';
+import { logger } from '@/lib/logger';
 
 export default function Home() {
   const [loading, setLoading] = useState(false);
@@ -41,7 +42,7 @@ export default function Home() {
       setPlan(data.plan);
       setPlanData({ subject, hoursPerDay, days });
     } catch (err: unknown) {
-      console.error('Erro:', err);
+      logger.error('Generate request failed:', err);
       const errorMessage = err instanceof Error ? err.message : 'Erro ao gerar plano de estudos. Tente novamente.';
       setError(errorMessage);
     } finally {
