@@ -2,37 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateStudyPlan } from '@/lib/gemini';
 import { AppError, toErrorBody } from '@/lib/errors';
 import { logger } from '@/lib/logger';
-
-function invalid(message: string): AppError {
-  return new AppError('INVALID_REQUEST', message, 400);
-}
+import { PlanRequest } from '@/lib/schema';
 
 export async function POST(request: NextRequest) {
   try {
-    let payload: { subject?: string; hoursPerDay?: number; days?: number };
+    let payload: unknown;
     try {
       payload = await request.json();
     } catch {
-      throw invalid('Requisição inválida.');
-    }
-    const { subject, hoursPerDay, days } = payload;
-
-    if (!subject || !hoursPerDay) {
-      throw invalid('Assunto e horas por dia são obrigatórios');
+      throw new AppError('INVALID_REQUEST', 'Requisição inválida.', 400);
     }
 
-    if (hoursPerDay <= 0 || hoursPerDay > 24) {
-      throw invalid('Horas por dia deve ser entre 1 e 24');
+    const parsed = PlanRequest.safeParse(payload);
+    if (!parsed.success) {
+      throw new AppError('INVALID_REQUEST', parsed.error.issues[0]?.message ?? 'Requisição inválida.', 400);
     }
+    const input = parsed.data;
 
-    const planDays = days || 7;
-    if (planDays < 1 || planDays > 30) {
-      throw invalid('Número de dias deve ser entre 1 e 30');
-    }
+    logger.info(`Generating plan: ${input.hoursPerDay}h/day - ${input.days} days - ${input.level}`);
 
-    logger.info(`Generating plan: ${subject} - ${hoursPerDay}h/day - ${planDays} days`);
-
-    const plan = await generateStudyPlan(subject, hoursPerDay, planDays);
+    const plan = await generateStudyPlan(input);
 
     return NextResponse.json({ plan });
   } catch (error: unknown) {

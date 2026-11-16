@@ -53,8 +53,8 @@ export const PlanRequest = z.object({
     .min(1, 'Número de dias deve ser entre 1 e 30.')
     .max(30, 'Número de dias deve ser entre 1 e 30.')
     .default(7),
-  level: Level.default('beginner'),
-  language: Language.default('pt'),
+  level: z.enum(LEVELS, { error: 'Nível inválido.' }).default('beginner'),
+  language: z.enum(LANGUAGES, { error: 'Idioma inválido.' }).default('pt'),
 });
 
 export type PlanRequest = z.infer<typeof PlanRequest>;

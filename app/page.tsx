@@ -7,6 +7,7 @@ import StudyPlanForm from '@/components/StudyPlanForm';
 import StudyPlanDisplay from '@/components/StudyPlanDisplay';
 import SavedPlans from '@/components/SavedPlans';
 import { logger } from '@/lib/logger';
+import { planToMarkdown } from '@/lib/export';
 
 export default function Home() {
   const [loading, setLoading] = useState(false);
@@ -39,7 +40,8 @@ export default function Home() {
         throw new Error(data.error?.message || 'Erro ao gerar plano de estudos');
       }
 
-      setPlan(data.plan);
+      // Temporary bridge until the card UI replaces markdown rendering.
+      setPlan(planToMarkdown(data.plan));
       setPlanData({ subject, hoursPerDay, days });
     } catch (err: unknown) {
       logger.error('Generate request failed:', err);

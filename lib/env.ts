@@ -5,6 +5,8 @@ const EnvSchema = z.object({
   GEMINI_API_KEY: z.string().trim().min(1),
   GEMINI_MODEL: z.string().trim().min(1).default('gemini-3-flash-preview'),
   GEMINI_FALLBACK_MODEL: z.string().trim().min(1).default('gemini-3.5-flash'),
+  // Plan generation needs no deep reasoning; "minimal" roughly halves latency. "off" omits the setting.
+  GEMINI_THINKING_LEVEL: z.enum(['off', 'minimal', 'low', 'medium', 'high']).default('minimal'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
@@ -15,6 +17,7 @@ export function getEnv(): Env {
     GEMINI_API_KEY: process.env.GEMINI_API_KEY || undefined,
     GEMINI_MODEL: process.env.GEMINI_MODEL || undefined,
     GEMINI_FALLBACK_MODEL: process.env.GEMINI_FALLBACK_MODEL || undefined,
+    GEMINI_THINKING_LEVEL: process.env.GEMINI_THINKING_LEVEL || undefined,
   });
 
   if (!parsed.success) {
