@@ -1,65 +1,72 @@
+import { getEnv } from './env';
+import { AppError } from './errors';
 import { logger } from './logger';
 
-const API_KEY = process.env.GEMINI_API_KEY;
+const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+const PRIMARY_TIMEOUT_MS = 30_000;
+// The fallback model is slower (~35s for a full plan), so it gets a longer budget.
+const FALLBACK_TIMEOUT_MS = 45_000;
 
-if (!API_KEY) {
-  throw new Error('GEMINI_API_KEY não está configurada. Verifique seu arquivo .env.local');
+interface GenerateContentResponse {
+  candidates?: { content?: { parts?: { text?: string }[] } }[];
+  error?: { message?: string };
 }
 
-interface ModelListResponse {
-  models?: { name: string; supportedGenerationMethods?: string[] }[];
-}
+/** An upstream failure that is worth retrying on the fallback model (429 or 5xx). */
+class RetryableUpstreamError extends AppError {}
 
-// Função para listar modelos disponíveis
-async function listAvailableModels(): Promise<string[]> {
+async function callModel(
+  model: string,
+  apiKey: string,
+  prompt: string,
+  timeoutMs: number
+): Promise<string> {
+  let response: Response;
+  logger.info(`Calling model ${model}`);
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?key=${API_KEY}`
-    );
-    
-    if (!response.ok) {
-      logger.warn('Could not list models, using default list.');
-      return ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
-    }
-
-    const data: ModelListResponse = await response.json();
-    const models = (data.models ?? [])
-      .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
-      .map((m) => m.name.replace('models/', ''));
-
-    return models.length > 0 ? models : ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
-  } catch {
-    logger.warn('Error listing models, using default list.');
-    return ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
-  }
-}
-
-// Função para gerar conteúdo usando API REST diretamente
-async function generateWithModel(modelName: string, prompt: string): Promise<string> {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${API_KEY}`,
-    {
+    response = await fetch(`${API_BASE}/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
       },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: prompt
-          }]
-        }]
-      })
-    }
-  );
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error?.message || `Erro ${response.status}: ${response.statusText}`);
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    logger.warn(`Request to ${model} failed:`, error);
+    throw new AppError(
+      'UPSTREAM_FAILED',
+      'O serviço de IA não respondeu a tempo. Tente novamente.',
+      502,
+      { cause: error }
+    );
   }
 
-  const data = await response.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || 'Resposta vazia da API';
+  if (!response.ok) {
+    const data: GenerateContentResponse = await response.json().catch(() => ({}));
+    logger.warn(`Model ${model} returned ${response.status}:`, data.error?.message);
+
+    if (response.status === 429) {
+      throw new RetryableUpstreamError(
+        'RATE_LIMITED',
+        'Muitas requisições ao serviço de IA. Aguarde um pouco e tente de novo.',
+        429
+      );
+    }
+    const message = 'O serviço de IA falhou. Tente novamente.';
+    if (response.status >= 500) {
+      throw new RetryableUpstreamError('UPSTREAM_FAILED', message, 502);
+    }
+    throw new AppError('UPSTREAM_FAILED', message, 502);
+  }
+
+  const data: GenerateContentResponse = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) {
+    throw new AppError('INVALID_RESPONSE', 'A IA devolveu uma resposta vazia. Tente gerar de novo.', 502);
+  }
+  return text;
 }
 
 export async function generateStudyPlan(
@@ -99,29 +106,15 @@ IMPORTANTE:
 
 Gere APENAS o plano de estudos, sem explicações adicionais.`;
 
-  // Lista de modelos para tentar (em ordem de preferência)
-  const modelsToTry = await listAvailableModels();
-  
-  let lastError: Error | null = null;
-  
-  for (const modelName of modelsToTry) {
-    try {
-      logger.info(`Trying model: ${modelName}`);
-      const result = await generateWithModel(modelName, prompt);
-      logger.info(`Model ${modelName} succeeded`);
-      return result;
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-      logger.warn(`Model ${modelName} failed: ${errorMessage}`);
-      lastError = error instanceof Error ? error : new Error(errorMessage);
-      // Tenta o próximo modelo
-      continue;
+  const env = getEnv();
+
+  try {
+    return await callModel(env.GEMINI_MODEL, env.GEMINI_API_KEY, prompt, PRIMARY_TIMEOUT_MS);
+  } catch (error) {
+    if (!(error instanceof RetryableUpstreamError) || env.GEMINI_FALLBACK_MODEL === env.GEMINI_MODEL) {
+      throw error;
     }
+    logger.warn(`Falling back to ${env.GEMINI_FALLBACK_MODEL}`);
+    return callModel(env.GEMINI_FALLBACK_MODEL, env.GEMINI_API_KEY, prompt, FALLBACK_TIMEOUT_MS);
   }
-  
-  // Se nenhum modelo funcionou, lança o último erro
-  throw new Error(
-    lastError?.message || 
-    'Nenhum modelo Gemini disponível. Verifique sua API key e os modelos disponíveis.'
-  );
 }
