@@ -2,3 +2,6 @@
 .next
 package-lock.json
 README.md
+coverage
+playwright-report
+test-results
