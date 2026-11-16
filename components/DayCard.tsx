@@ -93,11 +93,10 @@ export default function DayCard({ day, done, complete, onToggleExercise, onToggl
                   href={searchUrl(resource.query)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-blue-300 hover:text-blue-200 underline underline-offset-2 break-words"
+                  className="text-blue-300 hover:text-blue-200 underline underline-offset-2 break-words"
                 >
-                  {resource.title}
-                  <span className="text-slate-400 no-underline">— “{resource.query}”</span>
-                  <ExternalLink className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                  {resource.title} — “{resource.query}”
+                  <ExternalLink className="ml-1 inline h-3.5 w-3.5 align-[-2px]" aria-hidden="true" />
                   <span className="sr-only">(abre uma busca em nova aba)</span>
                 </a>
               </li>

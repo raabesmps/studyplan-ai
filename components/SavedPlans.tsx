@@ -1,119 +1,102 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { BookOpen, Trash2, Calendar, Clock } from 'lucide-react';
-import { StudyPlan } from '@/types/study-plan';
-import { getPlans, deletePlan } from '@/lib/storage';
 import { format } from 'date-fns';
-import StudyPlanDisplay from './StudyPlanDisplay';
+import { Archive, BookOpen, Clock, Trash2 } from 'lucide-react';
+import { countCompletedDays } from '@/lib/progress';
+import type { LegacyPlan, SavedPlan } from '@/lib/plans-store';
 
-export default function SavedPlans() {
-  const [plans, setPlans] = useState<StudyPlan[]>([]);
-  const [selectedPlan, setSelectedPlan] = useState<StudyPlan | null>(null);
+interface SavedPlansProps {
+  plans: SavedPlan[];
+  legacy: LegacyPlan[];
+  activeId: string | null;
+  onSelect: (id: string) => void;
+  onDelete: (id: string, legacy: boolean) => void;
+}
 
-  const loadPlans = () => {
-    setPlans(getPlans());
+const cardClass = (active: boolean) =>
+  `flex items-start justify-between gap-2 rounded-xl border p-4 transition-colors motion-reduce:transition-none ${
+    active ? 'border-blue-400 bg-slate-800' : 'border-slate-700 bg-slate-800/50 hover:border-blue-500'
+  }`;
+
+export default function SavedPlans({ plans, legacy, activeId, onSelect, onDelete }: SavedPlansProps) {
+  if (plans.length === 0 && legacy.length === 0) return null;
+
+  const confirmDelete = (id: string, isLegacy: boolean) => {
+    if (confirm('Tem certeza que deseja excluir este plano?')) onDelete(id, isLegacy);
   };
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is only readable on the client
-    loadPlans();
-  }, []);
-
-  const handleDelete = (id: string) => {
-    if (confirm('Tem certeza que deseja excluir este plano?')) {
-      deletePlan(id);
-      loadPlans();
-      if (selectedPlan?.id === id) {
-        setSelectedPlan(null);
-      }
-    }
-  };
-
-  if (plans.length === 0) {
-    return null;
-  }
 
   return (
-    <div className="mt-12">
-      <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
-        <BookOpen className="w-6 h-6 text-blue-400" />
-        Planos Salvos
+    <section aria-labelledby="saved-title" className="mt-12">
+      <h2 id="saved-title" className="mb-6 flex items-center gap-2 text-2xl font-bold text-white">
+        <BookOpen className="h-6 w-6 text-blue-400" aria-hidden="true" />
+        Meus planos
       </h2>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <AnimatePresence>
-          {plans.map((plan) => (
-            <motion.div
-              key={plan.id}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              whileHover={{ scale: 1.02 }}
-              className="bg-slate-800/50 backdrop-blur-lg rounded-xl p-6 border border-slate-700 cursor-pointer hover:border-blue-500 transition-all"
-              onClick={() => setSelectedPlan(plan)}
-            >
-              <div className="flex items-start justify-between mb-4">
-                <h3 className="text-lg font-semibold text-white line-clamp-1">
-                  {plan.subject}
-                </h3>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete(plan.id);
-                  }}
-                  className="p-1 hover:bg-slate-700 rounded transition-colors"
-                >
-                  <Trash2 className="w-4 h-4 text-red-400" />
-                </button>
-              </div>
+      <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {plans.map((saved) => {
+          const total = saved.plan.days.length;
+          const done = countCompletedDays(saved.plan, saved.completed);
+          const active = saved.id === activeId;
+          return (
+            <li key={saved.id} className={cardClass(active)}>
+              <button
+                type="button"
+                onClick={() => onSelect(saved.id)}
+                aria-current={active ? 'true' : undefined}
+                className="min-w-0 flex-1 rounded text-left"
+              >
+                <span className="line-clamp-1 block text-lg font-semibold text-white">{saved.plan.subject}</span>
+                <span className="mt-2 flex items-center gap-2 text-sm text-slate-300">
+                  <Clock className="h-4 w-4" aria-hidden="true" />
+                  {saved.hoursPerDay}h/dia · {done}/{total} dias concluídos
+                </span>
+                <span className="mt-1 block text-xs text-slate-400">
+                  {format(new Date(saved.createdAt), 'dd/MM/yyyy')}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => confirmDelete(saved.id, false)}
+                aria-label={`Excluir plano ${saved.plan.subject}`}
+                className="rounded p-2 hover:bg-slate-700"
+              >
+                <Trash2 className="h-4 w-4 text-red-300" aria-hidden="true" />
+              </button>
+            </li>
+          );
+        })}
 
-              <div className="space-y-2 text-sm text-slate-400">
-                <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4" />
-                  {plan.hoursPerDay}h/dia
-                </div>
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4" />
-                  {plan.days} dias
-                </div>
-                <div className="text-xs text-slate-500 mt-2">
-                  {format(new Date(plan.createdAt), "dd/MM/yyyy")}
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
-
-      <AnimatePresence>
-        {selectedPlan && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-            onClick={() => setSelectedPlan(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.9 }}
-              className="max-w-4xl w-full max-h-[90vh] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <StudyPlanDisplay
-                plan={selectedPlan.plan}
-                subject={selectedPlan.subject}
-                hoursPerDay={selectedPlan.hoursPerDay}
-                days={selectedPlan.days}
-                onClose={() => setSelectedPlan(null)}
-              />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+        {legacy.map((old) => {
+          const active = old.id === activeId;
+          return (
+            <li key={old.id} className={cardClass(active)}>
+              <button
+                type="button"
+                onClick={() => onSelect(old.id)}
+                aria-current={active ? 'true' : undefined}
+                className="min-w-0 flex-1 rounded text-left"
+              >
+                <span className="line-clamp-1 block text-lg font-semibold text-white">{old.subject}</span>
+                <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-amber-900/40 px-2.5 py-0.5 text-xs text-amber-200">
+                  <Archive className="h-3.5 w-3.5" aria-hidden="true" />
+                  Legado · somente leitura
+                </span>
+                <span className="mt-1 block text-xs text-slate-400">
+                  {format(new Date(old.createdAt), 'dd/MM/yyyy')}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => confirmDelete(old.id, true)}
+                aria-label={`Excluir plano legado ${old.subject}`}
+                className="rounded p-2 hover:bg-slate-700"
+              >
+                <Trash2 className="h-4 w-4 text-red-300" aria-hidden="true" />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
