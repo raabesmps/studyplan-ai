@@ -6,6 +6,8 @@ import { LEVELS } from './schema';
  */
 export const geminiPlanSchema = {
   type: 'object',
+  // Fixed key order lets the stream reveal progress: "day" always comes first in each item.
+  propertyOrdering: ['subject', 'level', 'days'],
   properties: {
     subject: { type: 'string' },
     level: { type: 'string', enum: [...LEVELS] },
@@ -13,6 +15,7 @@ export const geminiPlanSchema = {
       type: 'array',
       items: {
         type: 'object',
+        propertyOrdering: ['day', 'title', 'objective', 'topics', 'exercises', 'resources', 'minutes'],
         properties: {
           day: { type: 'integer' },
           title: { type: 'string' },
@@ -23,6 +26,7 @@ export const geminiPlanSchema = {
             type: 'array',
             items: {
               type: 'object',
+              propertyOrdering: ['title', 'query'],
               properties: {
                 title: { type: 'string' },
                 query: { type: 'string' },

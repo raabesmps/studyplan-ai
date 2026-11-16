@@ -92,10 +92,20 @@ const pt = {
     generic: 'Não foi possível gerar o plano. Tente de novo.',
   } satisfies Record<ErrorCode | 'network' | 'generic', string>,
   retry: 'Tentar de novo',
+  retryIn: (minutes: number) => `Tente de novo em ${minutes} min.`,
+  generating: {
+    title: (subject: string) => `Montando o plano de ${subject}`,
+    preparing: 'Preparando o roteiro…',
+    writing: (day: number, total: number) => `Escrevendo o dia ${day} de ${total}…`,
+    adjusting: 'Ajustando o formato do plano…',
+    cancel: 'Cancelar',
+    cancelled: 'Geração cancelada. O que você digitou foi mantido.',
+  },
   announce: {
     generating: 'Gerando plano de estudos…',
     generated: (subject: string, days: number) => `Plano de ${subject} gerado com ${days} dias.`,
     failed: 'Não foi possível gerar o plano.',
+    cancelled: 'Geração cancelada.',
   },
   footer: { poweredBy: 'Feito com a API do Google Gemini' },
 };
@@ -186,10 +196,20 @@ const en: Messages = {
     generic: 'Could not generate the plan. Try again.',
   },
   retry: 'Try again',
+  retryIn: (minutes: number) => `Try again in ${minutes} min.`,
+  generating: {
+    title: (subject: string) => `Building the plan for ${subject}`,
+    preparing: 'Preparing the route…',
+    writing: (day: number, total: number) => `Writing day ${day} of ${total}…`,
+    adjusting: 'Adjusting the plan format…',
+    cancel: 'Cancel',
+    cancelled: 'Generation cancelled. What you typed was kept.',
+  },
   announce: {
     generating: 'Generating study plan…',
     generated: (subject: string, days: number) => `Plan for ${subject} generated with ${days} days.`,
     failed: 'Could not generate the plan.',
+    cancelled: 'Generation cancelled.',
   },
   footer: { poweredBy: 'Built with the Google Gemini API' },
 };
