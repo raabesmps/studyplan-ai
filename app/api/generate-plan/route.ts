@@ -1,31 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateStudyPlan } from '@/lib/gemini';
+import { AppError, toErrorBody } from '@/lib/errors';
 import { logger } from '@/lib/logger';
+
+function invalid(message: string): AppError {
+  return new AppError('INVALID_REQUEST', message, 400);
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const { subject, hoursPerDay, days } = await request.json();
+    let payload: { subject?: string; hoursPerDay?: number; days?: number };
+    try {
+      payload = await request.json();
+    } catch {
+      throw invalid('Requisição inválida.');
+    }
+    const { subject, hoursPerDay, days } = payload;
 
     if (!subject || !hoursPerDay) {
-      return NextResponse.json(
-        { error: 'Assunto e horas por dia são obrigatórios' },
-        { status: 400 }
-      );
+      throw invalid('Assunto e horas por dia são obrigatórios');
     }
 
     if (hoursPerDay <= 0 || hoursPerDay > 24) {
-      return NextResponse.json(
-        { error: 'Horas por dia deve ser entre 1 e 24' },
-        { status: 400 }
-      );
+      throw invalid('Horas por dia deve ser entre 1 e 24');
     }
 
     const planDays = days || 7;
     if (planDays < 1 || planDays > 30) {
-      return NextResponse.json(
-        { error: 'Número de dias deve ser entre 1 e 30' },
-        { status: 400 }
-      );
+      throw invalid('Número de dias deve ser entre 1 e 30');
     }
 
     logger.info(`Generating plan: ${subject} - ${hoursPerDay}h/day - ${planDays} days`);
@@ -35,19 +37,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ plan });
   } catch (error: unknown) {
     logger.error('Failed to generate plan:', error);
-    
-    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-    
-    if (errorMessage.includes('API_KEY')) {
-      return NextResponse.json(
-        { error: 'API Key não configurada. Verifique seu arquivo .env.local' },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json(
-      { error: errorMessage || 'Erro ao gerar plano de estudos. Tente novamente.' },
-      { status: 500 }
-    );
+    const { status, body } = toErrorBody(error);
+    return NextResponse.json(body, { status });
   }
 }

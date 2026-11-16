@@ -36,7 +36,7 @@ export default function Home() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Erro ao gerar plano de estudos');
+        throw new Error(data.error?.message || 'Erro ao gerar plano de estudos');
       }
 
       setPlan(data.plan);
