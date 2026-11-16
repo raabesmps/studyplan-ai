@@ -1,27 +1,35 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { RotateCw } from 'lucide-react';
 import AppHeader from '@/components/AppHeader';
 import EmptyPlan from '@/components/EmptyPlan';
+import GeneratingPlan from '@/components/GeneratingPlan';
 import LegacyPlanView from '@/components/LegacyPlanView';
-import PlanSkeleton from '@/components/PlanSkeleton';
 import SavedPlans from '@/components/SavedPlans';
 import StudyPlanDisplay from '@/components/StudyPlanDisplay';
 import StudyPlanForm from '@/components/StudyPlanForm';
 import { logger } from '@/lib/logger';
 import { addPlan, removeLegacyPlan, removePlan, type SavedPlan } from '@/lib/plans-store';
 import { Plan, type PlanRequest } from '@/lib/schema';
+import { NDJSON_CONTENT_TYPE, readEvents } from '@/lib/stream';
 import { useT } from '@/lib/use-locale';
 import { usePlans } from '@/lib/use-plans';
 import type { Messages } from '@/lib/i18n';
 
 type ErrorKind = keyof Messages['errors'];
-type Announcement = { kind: 'generating' } | { kind: 'generated'; subject: string; days: number } | { kind: 'failed' };
+type Announcement =
+  | { kind: 'generating' }
+  | { kind: 'generated'; subject: string; days: number }
+  | { kind: 'failed' }
+  | { kind: 'cancelled' };
 
 /** Failure that carries a stable code, so the message can follow the interface language. */
 class GenerateError extends Error {
-  constructor(readonly kind: ErrorKind) {
+  constructor(
+    readonly kind: ErrorKind,
+    readonly retryAfter?: number
+  ) {
     super(kind);
   }
 }
@@ -35,6 +43,11 @@ export default function Home() {
   const { plans, legacy } = usePlans();
   const [loading, setLoading] = useState(false);
   const [errorKind, setErrorKind] = useState<ErrorKind | null>(null);
+  const [retryAfter, setRetryAfter] = useState<number | null>(null);
+  const [cancelled, setCancelled] = useState(false);
+  const [progressDay, setProgressDay] = useState<number | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const controllerRef = useRef<AbortController | null>(null);
   const [lastInput, setLastInput] = useState<PlanRequest | null>(null);
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
   // undefined = follow the most recently used plan; null = the user closed the plan view.
@@ -47,10 +60,21 @@ export default function Home() {
   const activePlan = plans.find((p) => p.id === activeId);
   const activeLegacy = legacy.find((p) => p.id === activeId);
 
+  // Leaving the page cancels any generation in flight (and the server stops the AI call).
+  useEffect(() => () => controllerRef.current?.abort(), []);
+
+  const handleCancel = () => controllerRef.current?.abort();
+
   const handleGenerate = async (input: PlanRequest) => {
+    const controller = new AbortController();
+    controllerRef.current = controller;
     setLastInput(input);
     setLoading(true);
     setErrorKind(null);
+    setRetryAfter(null);
+    setCancelled(false);
+    setProgressDay(null);
+    setRetrying(false);
     setAnnouncement({ kind: 'generating' });
 
     try {
@@ -58,15 +82,39 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
+        signal: controller.signal,
       });
-      const data = await response.json().catch(() => null);
 
-      if (!response.ok) {
-        const code = data?.error?.code;
-        throw new GenerateError(isErrorKind(code, t.errors) ? code : 'generic');
+      let planPayload: unknown;
+      const isStream = response.ok && (response.headers.get('content-type') ?? '').includes(NDJSON_CONTENT_TYPE);
+
+      if (isStream && response.body) {
+        for await (const event of readEvents(response.body)) {
+          if (event.type === 'progress') {
+            setRetrying(false);
+            setProgressDay(event.day);
+          } else if (event.type === 'retry') {
+            setRetrying(true);
+            setProgressDay(null);
+          } else if (event.type === 'plan') {
+            planPayload = event.plan;
+          } else {
+            const code = event.error.code;
+            throw new GenerateError(isErrorKind(code, t.errors) ? code : 'generic', event.error.retryAfter);
+          }
+        }
+        if (planPayload === undefined) throw new GenerateError('UPSTREAM_FAILED');
+      } else {
+        // Plain JSON: an error found before streaming started (or a non-streaming success).
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+          const code = data?.error?.code;
+          throw new GenerateError(isErrorKind(code, t.errors) ? code : 'generic', data?.error?.retryAfter);
+        }
+        planPayload = data?.plan;
       }
 
-      const parsed = Plan.safeParse(data?.plan);
+      const parsed = Plan.safeParse(planPayload);
       if (!parsed.success) throw new GenerateError('INVALID_RESPONSE');
 
       const now = new Date().toISOString();
@@ -83,9 +131,15 @@ export default function Home() {
       setSelection(saved.id);
       setAnnouncement({ kind: 'generated', subject: saved.plan.subject, days: saved.plan.days.length });
     } catch (err: unknown) {
-      logger.error('Generate request failed:', err);
-      setErrorKind(err instanceof GenerateError ? err.kind : err instanceof TypeError ? 'network' : 'generic');
-      setAnnouncement({ kind: 'failed' });
+      if (controller.signal.aborted) {
+        setCancelled(true);
+        setAnnouncement({ kind: 'cancelled' });
+      } else {
+        logger.error('Generate request failed:', err);
+        setErrorKind(err instanceof GenerateError ? err.kind : err instanceof TypeError ? 'network' : 'generic');
+        setRetryAfter(err instanceof GenerateError ? (err.retryAfter ?? null) : null);
+        setAnnouncement({ kind: 'failed' });
+      }
     } finally {
       setLoading(false);
     }
@@ -105,7 +159,9 @@ export default function Home() {
       ? t.announce.generating
       : announcement.kind === 'generated'
         ? t.announce.generated(announcement.subject, announcement.days)
-        : t.announce.failed;
+        : announcement.kind === 'cancelled'
+          ? t.announce.cancelled
+          : t.announce.failed;
 
   return (
     <>
@@ -137,7 +193,10 @@ export default function Home() {
                 role="alert"
                 className="mb-8 flex flex-wrap items-center justify-between gap-3 rounded-xl border-[1.5px] border-danger bg-surface p-4 print:hidden"
               >
-                <p className="min-w-0 flex-1 font-semibold">{t.errors[errorKind]}</p>
+                <p className="min-w-0 flex-1 font-semibold">
+                  {t.errors[errorKind]}
+                  {retryAfter ? ` ${t.retryIn(Math.max(1, Math.ceil(retryAfter / 60)))}` : ''}
+                </p>
                 {lastInput && (
                   <button
                     type="button"
@@ -152,10 +211,20 @@ export default function Home() {
               </div>
             )}
 
+            {cancelled && !loading && (
+              <p className="mb-8 rounded-xl border border-line bg-surface p-4 text-muted print:hidden">
+                {t.generating.cancelled}
+              </p>
+            )}
+
             {loading ? (
-              <div aria-busy="true">
-                <PlanSkeleton />
-              </div>
+              <GeneratingPlan
+                subject={lastInput?.subject ?? ''}
+                total={lastInput?.days ?? 0}
+                day={progressDay}
+                retrying={retrying}
+                onCancel={handleCancel}
+              />
             ) : activePlan ? (
               <StudyPlanDisplay key={activePlan.id} saved={activePlan} onClose={() => setSelection(null)} />
             ) : activeLegacy ? (
