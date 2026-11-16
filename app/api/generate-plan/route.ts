@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getEnv } from '@/lib/env';
 import { generateStudyPlan } from '@/lib/gemini';
 import { AppError, toErrorBody } from '@/lib/errors';
 import { logger } from '@/lib/logger';
@@ -29,9 +30,15 @@ export async function POST(request: NextRequest) {
 
     const parsed = PlanRequest.safeParse(payload);
     if (!parsed.success) {
-      throw new AppError('INVALID_REQUEST', parsed.error.issues[0]?.message ?? 'Requisição inválida.', 400);
+      // Field errors carry our own pt-BR messages; a top-level type error (e.g. a string body) would
+      // only have the library's raw English text, so it gets a generic message instead.
+      const issue = parsed.error.issues[0];
+      const message = issue && issue.path.length > 0 ? issue.message : 'Requisição inválida.';
+      throw new AppError('INVALID_REQUEST', message, 400);
     }
     input = parsed.data;
+    // Fail fast (HTTP 500) on missing configuration instead of inside an already-open 200 stream.
+    getEnv();
   } catch (error) {
     return jsonError(error);
   }
