@@ -27,6 +27,11 @@ jobs:
 
       - run: npm ci
 
+      # What ships to users: no known high-severity vulnerability in the runtime dependencies. Dev tooling
+      # is left out on purpose: its current high advisory (picomatch ReDoS) has no patched release yet and
+      # only matters to someone feeding hostile glob patterns to the build tools.
+      - run: npm audit --omit=dev --audit-level=high
+
       - run: npm run lint
 
       - run: npm run typecheck
