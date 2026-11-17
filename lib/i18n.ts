@@ -97,6 +97,12 @@ const pt = {
   notice: {
     switched: (from: string, to: string) =>
       `Este plano foi gerado com o ${to}, porque o ${from} estava indisponível no momento.`,
+    demo: {
+      'demo-mode':
+        'Modo demonstração: este é um plano de exemplo, não foi gerado para o seu assunto. Ele tem no máximo 5 dias.',
+      'daily-limit':
+        'O limite diário de planos gerados por IA foi atingido, então este é um plano de exemplo (no máximo 5 dias). Volte amanhã para gerar o seu.',
+    },
   },
   generating: {
     title: (subject: string) => `Montando o plano de ${subject}`,
@@ -207,6 +213,11 @@ const en: Messages = {
   notice: {
     switched: (from: string, to: string) =>
       `This plan was generated with ${to} because ${from} was unavailable at the moment.`,
+    demo: {
+      'demo-mode': 'Demo mode: this is a sample plan, not one generated for your subject. It has at most 5 days.',
+      'daily-limit':
+        "Today's limit of AI-generated plans has been reached, so this is a sample plan (at most 5 days). Come back tomorrow to generate yours.",
+    },
   },
   generating: {
     title: (subject: string) => `Building the plan for ${subject}`,

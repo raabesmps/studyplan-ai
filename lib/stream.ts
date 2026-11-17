@@ -6,8 +6,13 @@ export type StreamEvent =
   | { type: 'progress'; day: number; total: number }
   | { type: 'retry' }
   | { type: 'switch'; from: ProviderName; to: ProviderName } // the first AI provider failed; another takes over
+  | { type: 'demo'; reason: DemoReason } // the plan is a sample, not generated for the request
   | { type: 'plan'; plan: unknown } // validated by the consumer with Plan.safeParse
   | ({ type: 'error' } & ErrorBody);
+
+/** Why a sample plan was served: demo mode is on, or the app's daily AI budget is used up. */
+export type DemoReason = 'demo-mode' | 'daily-limit';
+const DEMO_REASONS: readonly unknown[] = ['demo-mode', 'daily-limit'];
 
 export const NDJSON_CONTENT_TYPE = 'application/x-ndjson';
 
@@ -43,6 +48,8 @@ export function parseEventLine(line: string): StreamEvent | null {
       const known = (value: unknown): value is ProviderName => (PROVIDERS as readonly unknown[]).includes(value);
       return known(raw.from) && known(raw.to) ? { type: 'switch', from: raw.from, to: raw.to } : null;
     }
+    case 'demo':
+      return DEMO_REASONS.includes(raw.reason) ? { type: 'demo', reason: raw.reason as DemoReason } : null;
     case 'plan':
       return 'plan' in raw ? { type: 'plan', plan: raw.plan } : null;
     case 'error': {

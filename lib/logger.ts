@@ -10,4 +10,8 @@ export const logger = {
   error: (...args: unknown[]): void => {
     if (isDev) console.error(...args);
   },
+  /** Always logged (also in production), for operators: e.g. the limiter is down. Never pass secrets. */
+  alert: (message: string, cause?: unknown): void => {
+    console.error(`[studyplan] ${message}`, cause instanceof Error ? cause.message : '');
+  },
 };

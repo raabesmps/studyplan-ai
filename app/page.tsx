@@ -12,7 +12,7 @@ import StudyPlanForm from '@/components/StudyPlanForm';
 import { logger } from '@/lib/logger';
 import { addPlan, removeLegacyPlan, removePlan, type SavedPlan } from '@/lib/plans-store';
 import { Plan, type PlanRequest } from '@/lib/schema';
-import { NDJSON_CONTENT_TYPE, readEvents } from '@/lib/stream';
+import { NDJSON_CONTENT_TYPE, readEvents, type DemoReason } from '@/lib/stream';
 import { useT } from '@/lib/use-locale';
 import { usePlans } from '@/lib/use-plans';
 import type { Messages } from '@/lib/i18n';
@@ -50,6 +50,8 @@ export default function Home() {
   const [retrying, setRetrying] = useState(false);
   // Set when the first AI provider failed and another one answered.
   const [switched, setSwitched] = useState<{ from: ProviderName; to: ProviderName } | null>(null);
+  // Set when the plan is a ready-made sample instead of one written for the request.
+  const [demo, setDemo] = useState<DemoReason | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const [lastInput, setLastInput] = useState<PlanRequest | null>(null);
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
@@ -79,6 +81,7 @@ export default function Home() {
     setProgressDay(null);
     setRetrying(false);
     setSwitched(null);
+    setDemo(null);
     setAnnouncement({ kind: 'generating' });
 
     try {
@@ -104,6 +107,8 @@ export default function Home() {
             setSwitched({ from: event.from, to: event.to });
             setRetrying(false);
             setProgressDay(null);
+          } else if (event.type === 'demo') {
+            setDemo(event.reason);
           } else if (event.type === 'plan') {
             planPayload = event.plan;
           } else {
@@ -222,6 +227,12 @@ export default function Home() {
             {switched && !loading && !errorKind && (
               <p className="mb-8 rounded-xl border border-line bg-surface p-4 text-muted print:hidden">
                 {t.notice.switched(t.providers[switched.from], t.providers[switched.to])}
+              </p>
+            )}
+
+            {demo && !loading && !errorKind && (
+              <p className="mb-8 rounded-xl border border-line bg-surface p-4 text-muted print:hidden">
+                {t.notice.demo[demo]}
               </p>
             )}
 
