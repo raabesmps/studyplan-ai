@@ -51,7 +51,8 @@ export default function AppHeader() {
               type="button"
               lang={code}
               aria-pressed={code === locale}
-              aria-label={t.languages[code]}
+              // The accessible name must contain the visible text ("EN") for voice-control users (WCAG 2.5.3).
+              aria-label={`${code.toUpperCase()}: ${t.languages[code]}`}
               onClick={() => setLocale(code)}
               className={`rounded-md px-3 py-1.5 text-sm font-bold transition-colors ${
                 code === locale ? 'bg-ink text-paper' : 'text-muted hover:text-ink'

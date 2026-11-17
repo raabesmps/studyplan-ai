@@ -222,7 +222,7 @@ describe('<Home>: errors', () => {
     render(<Home />);
     await fillAndSubmit(user);
     await screen.findByRole('alert');
-    await user.click(screen.getByRole('button', { name: 'English' }));
+    await user.click(screen.getByRole('button', { name: /English/ }));
     expect(screen.getByRole('alert')).toHaveTextContent('The AI service did not respond.');
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
   });
@@ -379,15 +379,15 @@ describe('<Home>: language and theme', () => {
     const user = userEvent.setup();
     render(<Home />);
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Planos de estudo que você pode marcar como feitos');
-    expect(screen.getByRole('button', { name: 'Português' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /Português/ })).toHaveAttribute('aria-pressed', 'true');
 
-    await user.click(screen.getByRole('button', { name: 'English' }));
+    await user.click(screen.getByRole('button', { name: /English/ }));
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Study plans you can check off');
-    expect(screen.getByRole('button', { name: 'English' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /English/ })).toHaveAttribute('aria-pressed', 'true');
     expect(localStorage.getItem('studyplan-ai:locale')).toBe('en');
     await waitFor(() => expect(document.documentElement.lang).toBe('en'));
 
-    await user.click(screen.getByRole('button', { name: 'Português' }));
+    await user.click(screen.getByRole('button', { name: /Português/ }));
     await waitFor(() => expect(document.documentElement.lang).toBe('pt-BR'));
   });
 
