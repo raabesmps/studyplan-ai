@@ -16,6 +16,8 @@
 //   bothdown         Claude answers 529 and both Gemini models answer 500
 //
 // Claude is served at POST /v1/messages and Gemini at POST /<anything>/models/<model>:streamGenerateContent.
+// It also stands in for Upstash Redis (POST /pipeline with INCR, EXPIRE [NX] and TTL, real clock) so the
+// rate limiter can be exercised. POST /__redis/reset clears it; POST /__redis/set?key=K&value=N presets a counter.
 // Inspect or reset what the app sent with GET /__log and POST /__reset.
 import http from 'node:http';
 
@@ -137,8 +139,59 @@ async function handleClaude(req, res) {
   res.end();
 }
 
+// --- Upstash Redis (REST pipeline) ---------------------------------------------------------
+const redis = new Map(); // key -> { value, expiresAt | null }
+const redisEntry = (key) => {
+  const entry = redis.get(key);
+  if (entry && entry.expiresAt !== null && entry.expiresAt <= Date.now()) redis.delete(key);
+  return redis.get(key);
+};
+
+function redisCommand([name, key, ...args]) {
+  const k = String(key);
+  if (name === 'INCR') {
+    const entry = redisEntry(k) ?? { value: 0, expiresAt: null };
+    entry.value += 1;
+    redis.set(k, entry);
+    return { result: entry.value };
+  }
+  if (name === 'EXPIRE') {
+    const entry = redisEntry(k);
+    if (!entry || (args[1] === 'NX' && entry.expiresAt !== null)) return { result: 0 };
+    entry.expiresAt = Date.now() + Number(args[0]) * 1000;
+    return { result: 1 };
+  }
+  if (name === 'TTL') {
+    const entry = redisEntry(k);
+    if (!entry) return { result: -2 };
+    return { result: entry.expiresAt === null ? -1 : Math.ceil((entry.expiresAt - Date.now()) / 1000) };
+  }
+  return { error: `ERR unknown command '${name}'` };
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
+
+  if (req.method === 'POST' && url.pathname === '/pipeline') {
+    const authorized = req.headers.authorization === 'Bearer e2e-upstash-token';
+    const body = await readBody(req);
+    if (!authorized) {
+      res.writeHead(401, { 'Content-Type': 'application/json' }).end('{"error":"Unauthorized"}');
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(JSON.parse(body).map(redisCommand)));
+    return;
+  }
+  if (req.method === 'POST' && url.pathname === '/__redis/reset') {
+    redis.clear();
+    res.writeHead(204).end();
+    return;
+  }
+  if (req.method === 'POST' && url.pathname === '/__redis/set') {
+    redis.set(url.searchParams.get('key'), { value: Number(url.searchParams.get('value')), expiresAt: Date.now() + 3_600_000 });
+    res.writeHead(204).end();
+    return;
+  }
 
   if (req.method === 'GET' && url.pathname === '/__log') {
     res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(log));

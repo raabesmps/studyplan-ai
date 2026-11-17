@@ -1,5 +1,5 @@
-/** Warms up both app instances before the first test, so cold-start latency is not counted against a test. */
-const URLS = ['http://localhost:3100', 'http://localhost:3101'];
+/** Warms up the app instances before the first test, so cold-start latency is not counted against a test. */
+const URLS = ['http://localhost:3100', 'http://localhost:3101', 'http://localhost:3102'];
 
 async function warm(url: string) {
   for (let attempt = 0; attempt < 5; attempt++) {

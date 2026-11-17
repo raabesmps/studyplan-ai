@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 const APP_PORT = 3100; // not 3002, so a `npm run dev` session never gets mixed up with the tests
 const CLAUDE_APP_PORT = 3101; // the same build with Claude as the primary provider
+const LIMITS_APP_PORT = 3102; // rate limiting on, against the fake Upstash
 const FAKE_GEMINI_PORT = 4010;
 
 export default defineConfig({
@@ -43,6 +44,8 @@ export default defineConfig({
         GEMINI_API_KEY: 'e2e-test-key',
         GEMINI_API_BASE_URL: `http://localhost:${FAKE_GEMINI_PORT}/v1beta/models`,
         ANTHROPIC_API_KEY: '',
+        // Every test shares one IP, so the limiter would block the suite; it has its own instance below.
+        RATE_LIMIT_DISABLED: 'true',
       },
     },
     {
@@ -57,6 +60,25 @@ export default defineConfig({
         ANTHROPIC_BASE_URL: `http://localhost:${FAKE_GEMINI_PORT}`,
         GEMINI_API_KEY: 'e2e-test-key',
         GEMINI_API_BASE_URL: `http://localhost:${FAKE_GEMINI_PORT}/v1beta/models`,
+        RATE_LIMIT_DISABLED: 'true',
+      },
+    },
+    {
+      // Same build with the rate limiter on (3 plans per visitor), talking to the fake Upstash.
+      // Each test picks its own "visitor" with an x-forwarded-for header, so tests do not share a quota.
+      command: `npx next start -p ${LIMITS_APP_PORT}`,
+      url: `http://localhost:${LIMITS_APP_PORT}`,
+      reuseExistingServer: Boolean(process.env.E2E_REUSE_SERVER),
+      timeout: 120_000,
+      env: {
+        AI_PROVIDER: 'gemini',
+        GEMINI_API_KEY: 'e2e-test-key',
+        GEMINI_API_BASE_URL: `http://localhost:${FAKE_GEMINI_PORT}/v1beta/models`,
+        ANTHROPIC_API_KEY: '',
+        UPSTASH_REDIS_REST_URL: `http://localhost:${FAKE_GEMINI_PORT}`,
+        UPSTASH_REDIS_REST_TOKEN: 'e2e-upstash-token',
+        RATE_LIMIT_MAX: '3',
+        DAILY_LIMIT: '1000',
       },
     },
   ],
