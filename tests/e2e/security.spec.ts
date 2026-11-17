@@ -67,15 +67,15 @@ test.describe('the CSP does not break the app', () => {
     await page.goto('/');
     const result = await page.evaluate(
       () =>
-        new Promise<{ ran: boolean; blockedBy: string | null }>((resolve) => {
-          let blockedBy: string | null = null;
-          document.addEventListener('securitypolicyviolation', (event) => (blockedBy = event.violatedDirective));
+        new Promise<{ ran: boolean; blockedBy: string[] }>((resolve) => {
+          const blockedBy: string[] = [];
+          document.addEventListener('securitypolicyviolation', (event) => blockedBy.push(event.violatedDirective));
           // What an XSS hole would let an attacker write into the page.
-          document.body.insertAdjacentHTML('beforeend', '<img src="x:" onerror="window.__injected = true">');
+          document.body.insertAdjacentHTML('beforeend', '<img src="data:," onerror="window.__injected = true">');
           setTimeout(() => resolve({ ran: Boolean((window as { __injected?: boolean }).__injected), blockedBy }), 300);
         })
     );
     expect(result.ran).toBe(false);
-    expect(result.blockedBy).toMatch(/script-src/);
+    expect(result.blockedBy.some((directive) => directive.startsWith('script-src'))).toBe(true);
   });
 });
