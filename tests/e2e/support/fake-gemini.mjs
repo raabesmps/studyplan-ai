@@ -1,14 +1,21 @@
-// A tiny fake of Gemini's streaming API, for end-to-end tests. No network, no quota, no key.
+// A tiny fake of the Gemini and Claude streaming APIs, for end-to-end tests. No network, no quota, no key.
 //
 // The scenario is chosen by the learner's subject: "SCENARIO:<name> ...". Supported scenarios:
 //   ok               stream every day, one every 450 ms (default)
 //   slow             like ok, but one day every 1.2 s (to cancel in the middle)
-//   fallback         the primary model fails mid-stream, the fallback model answers
+//   fallback         (Gemini) the primary model fails mid-stream, the fallback model answers
 //   invalid-then-ok  the first answer is not valid JSON, the retry is fine
-//   429              both models are over quota
-//   500both          both models answer 500
-//   midstream        both models fail in the middle of the stream
+//   429              (Gemini) both models are over quota
+//   500both          (Gemini) both models answer 500
+//   midstream        (Gemini) both models fail in the middle of the stream
+//   claude-529       (Claude) overloaded; Gemini answers normally
+//   claude-429       (Claude) rate limited with Retry-After; Gemini answers normally
+//   claude-credit    (Claude) "credit balance is too low" (HTTP 400); Gemini answers normally
+//   claude-401       (Claude) invalid key; Gemini answers normally
+//   claude-midstream (Claude) fails in the middle of the stream; Gemini answers normally
+//   bothdown         Claude answers 529 and both Gemini models answer 500
 //
+// Claude is served at POST /v1/messages and Gemini at POST /<anything>/models/<model>:streamGenerateContent.
 // Inspect or reset what the app sent with GET /__log and POST /__reset.
 import http from 'node:http';
 
@@ -50,6 +57,86 @@ function readBody(req) {
   });
 }
 
+const claudeEvent = (res, name, data) => res.write(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`);
+
+async function handleClaude(req, res) {
+  const body = JSON.parse(await readBody(req));
+  const prompt = body.messages[0].content;
+  const subject = /<subject>([^<]*)<\/subject>/.exec(prompt)?.[1] ?? '';
+  const days = Number(/exactly (\d+) days/.exec(prompt)?.[1] ?? 3);
+  const scenario = /^SCENARIO:(\S+)/.exec(subject)?.[1] ?? 'ok';
+  const isRetry = prompt.includes('previous answer was rejected');
+  const entry = {
+    provider: 'claude',
+    subject,
+    model: body.model,
+    scenario,
+    days,
+    isRetry,
+    // How the app authenticated and what it asked for, so tests can assert on it.
+    authorized: Boolean(req.headers.authorization || req.headers['x-api-key']),
+    effort: body.output_config?.effort ?? null,
+    structured: body.output_config?.format?.type ?? null,
+    closedEarly: false,
+  };
+  log.push(entry);
+
+  let finished = false;
+  res.on('close', () => {
+    if (!finished) entry.closedEarly = true; // the app aborted the upstream call
+  });
+  const fail = (status, type, message, headers = {}) => {
+    finished = true;
+    res.writeHead(status, { 'Content-Type': 'application/json', ...headers }).end(JSON.stringify({ type: 'error', error: { type, message } }));
+  };
+
+  if (scenario === 'claude-529' || scenario === 'bothdown') return fail(529, 'overloaded_error', 'Overloaded');
+  if (scenario === 'claude-429') return fail(429, 'rate_limit_error', 'Rate limited', { 'retry-after': '30' });
+  if (scenario === 'claude-401') return fail(401, 'authentication_error', 'invalid x-api-key');
+  if (scenario === 'claude-credit') {
+    return fail(400, 'invalid_request_error', 'Your credit balance is too low to access the Anthropic API.');
+  }
+
+  const plan = buildPlan(days, subject);
+  const parts = pieces(plan);
+  res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+  claudeEvent(res, 'message_start', {
+    type: 'message_start',
+    message: {
+      id: 'msg_fake', type: 'message', role: 'assistant', content: [], model: body.model,
+      stop_reason: null, stop_sequence: null, usage: { input_tokens: 10, output_tokens: 1 },
+    },
+  });
+  claudeEvent(res, 'content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } });
+  const text = (value) => claudeEvent(res, 'content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: value } });
+
+  if (scenario === 'invalid-then-ok' && !isRetry) {
+    text(parts[0] + parts[1]);
+    await sleep(150);
+    text('{"broken": ');
+  } else if (scenario === 'claude-midstream') {
+    text(parts[0] + parts[1]);
+    await sleep(200);
+    claudeEvent(res, 'error', { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } });
+    finished = true;
+    return res.end();
+  } else {
+    const delay = scenario === 'slow' ? 1200 : 450;
+    await sleep(250);
+    text(parts[0] + parts[1]);
+    for (let i = 2; i < parts.length; i++) {
+      await sleep(delay);
+      if (res.destroyed) return;
+      text(parts[i]);
+    }
+  }
+  claudeEvent(res, 'content_block_stop', { type: 'content_block_stop', index: 0 });
+  claudeEvent(res, 'message_delta', { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 50 } });
+  claudeEvent(res, 'message_stop', { type: 'message_stop' });
+  finished = true;
+  res.end();
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
 
@@ -61,6 +148,11 @@ const server = http.createServer(async (req, res) => {
     log.length = 0;
     callsBySubject.clear();
     res.writeHead(204).end();
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/v1/messages') {
+    await handleClaude(req, res);
     return;
   }
 
@@ -79,6 +171,7 @@ const server = http.createServer(async (req, res) => {
   const scenario = /^SCENARIO:(\S+)/.exec(subject)?.[1] ?? 'ok';
   const isRetry = prompt.includes('previous answer was rejected');
   const entry = {
+    provider: 'gemini',
     subject,
     model,
     scenario,
@@ -110,7 +203,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(429, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: { code: 429, message: 'quota' } }));
     return;
   }
-  if (scenario === '500both') {
+  if (scenario === '500both' || scenario === 'bothdown') {
     finished = true;
     res.writeHead(500, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: { code: 500, message: 'boom' } }));
     return;

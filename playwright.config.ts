@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const APP_PORT = 3100; // not 3002, so a `npm run dev` session never gets mixed up with the tests
+const CLAUDE_APP_PORT = 3101; // the same build with Claude as the primary provider
 const FAKE_GEMINI_PORT = 4010;
 
 export default defineConfig({
@@ -37,6 +38,23 @@ export default defineConfig({
       reuseExistingServer: Boolean(process.env.E2E_REUSE_SERVER),
       timeout: 240_000,
       env: {
+        // The main suite exercises the Gemini pipeline; Claude and failover run on the second instance.
+        AI_PROVIDER: 'gemini',
+        GEMINI_API_KEY: 'e2e-test-key',
+        GEMINI_API_BASE_URL: `http://localhost:${FAKE_GEMINI_PORT}/v1beta/models`,
+        ANTHROPIC_API_KEY: '',
+      },
+    },
+    {
+      // Same build, with Claude as the default provider and Gemini as its failover (like production).
+      command: `npx next start -p ${CLAUDE_APP_PORT}`,
+      url: `http://localhost:${CLAUDE_APP_PORT}`,
+      reuseExistingServer: Boolean(process.env.E2E_REUSE_SERVER),
+      timeout: 120_000,
+      env: {
+        AI_PROVIDER: 'claude',
+        ANTHROPIC_API_KEY: 'e2e-test-claude-key',
+        ANTHROPIC_BASE_URL: `http://localhost:${FAKE_GEMINI_PORT}`,
         GEMINI_API_KEY: 'e2e-test-key',
         GEMINI_API_BASE_URL: `http://localhost:${FAKE_GEMINI_PORT}/v1beta/models`,
       },

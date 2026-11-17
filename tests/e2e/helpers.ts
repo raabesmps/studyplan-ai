@@ -8,15 +8,21 @@ export const GENERATING_STATUS = 'section[aria-labelledby="generating-title"] > 
 export const ALERT = '[role="alert"]:not(#__next-route-announcer__)';
 
 export interface UpstreamCall {
+  provider: 'claude' | 'gemini';
   subject: string;
   model: string;
   scenario: string;
   days: number;
   isRetry: boolean;
-  keyInHeader: boolean;
-  keyInUrl: boolean;
-  thinking: unknown;
   closedEarly: boolean;
+  // Gemini calls
+  keyInHeader?: boolean;
+  keyInUrl?: boolean;
+  thinking?: unknown;
+  // Claude calls
+  authorized?: boolean;
+  effort?: string | null;
+  structured?: string | null;
 }
 
 /** What the app sent to the (fake) Gemini for a given subject. Subjects must be unique per test. */
