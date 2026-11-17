@@ -12,6 +12,8 @@ interface GeneratingPlanProps {
   day: number | null;
   /** True while a second attempt runs after an invalid answer. */
   retrying: boolean;
+  /** Set when the first AI provider failed and another one took over (already translated). */
+  switchedMessage?: string | null;
   onCancel: () => void;
 }
 
@@ -19,13 +21,20 @@ interface GeneratingPlanProps {
  * Shown while a plan streams in. The timeline builds itself from real progress:
  * finished days get a check, the day being written pulses, the rest stay outlined.
  */
-export default function GeneratingPlan({ subject, total, day, retrying, onCancel }: GeneratingPlanProps) {
+export default function GeneratingPlan({
+  subject,
+  total,
+  day,
+  retrying,
+  switchedMessage,
+  onCancel,
+}: GeneratingPlanProps) {
   const { t } = useT();
   const current = day ?? 0;
   const status = retrying
     ? t.generating.adjusting
     : day === null
-      ? t.generating.preparing
+      ? (switchedMessage ?? t.generating.preparing)
       : t.generating.writing(day, total);
 
   return (
@@ -47,6 +56,11 @@ export default function GeneratingPlan({ subject, total, day, retrying, onCancel
       <p aria-live="off" className="mt-3 text-lg text-muted">
         {status}
       </p>
+      {switchedMessage && day !== null && !retrying && (
+        <p aria-live="off" className="mt-1 text-sm text-muted">
+          {switchedMessage}
+        </p>
+      )}
 
       <ol aria-hidden="true" className="mt-8 list-none p-0">
         {Array.from({ length: total }, (_, i) => {

@@ -128,6 +128,99 @@ describe('<Home>: generating a plan', () => {
   });
 });
 
+// --- AI provider failover ------------------------------------------------------------------
+
+describe('<Home>: when the AI provider switches', () => {
+  it('says which provider took over while generating, then keeps a note next to the plan', async () => {
+    const user = userEvent.setup();
+    const stream = controlledStream();
+    fetchMock.mockResolvedValueOnce(stream.response);
+    render(<Home />);
+    await fillAndSubmit(user);
+
+    stream.push({ type: 'switch', from: 'claude', to: 'gemini' });
+    expect(await screen.findByText('O Claude não respondeu. Gerando com o Gemini…')).toBeInTheDocument();
+
+    stream.push({ type: 'progress', day: 2, total: 7 });
+    expect(await screen.findByText('Escrevendo o dia 2 de 7…')).toBeInTheDocument();
+    // The switch stays visible while days are written, so it is not lost.
+    expect(screen.getByText('O Claude não respondeu. Gerando com o Gemini…')).toBeInTheDocument();
+
+    stream.push({ type: 'plan', plan: makePlan(3) });
+    stream.close();
+    expect(await screen.findAllByRole('article')).toHaveLength(3);
+    expect(
+      screen.getByText('Este plano foi gerado com o Gemini, porque o Claude estava indisponível no momento.')
+    ).toBeInTheDocument();
+  });
+
+  it('resets the day counter on a switch so progress never looks stale', async () => {
+    const user = userEvent.setup();
+    const stream = controlledStream();
+    fetchMock.mockResolvedValueOnce(stream.response);
+    render(<Home />);
+    await fillAndSubmit(user);
+
+    stream.push({ type: 'progress', day: 3, total: 7 });
+    await screen.findByText('Escrevendo o dia 3 de 7…');
+    stream.push({ type: 'switch', from: 'claude', to: 'gemini' });
+    await waitFor(() => expect(screen.queryByText('Escrevendo o dia 3 de 7…')).not.toBeInTheDocument());
+    stream.push({ type: 'plan', plan: makePlan(3) });
+    stream.close();
+    await screen.findAllByRole('article');
+  });
+
+  it('follows the interface language', async () => {
+    localStorage.setItem('studyplan-ai:locale', 'en');
+    const user = userEvent.setup();
+    fetchMock.mockResolvedValueOnce(
+      ndjson([{ type: 'switch', from: 'gemini', to: 'claude' }, { type: 'plan', plan: makePlan(3) }])
+    );
+    render(<Home />);
+    await user.type(screen.getByLabelText('What do you want to learn?'), 'Go');
+    await user.click(screen.getByRole('button', { name: 'Generate plan' }));
+    expect(
+      await screen.findByText('This plan was generated with Claude because Gemini was unavailable at the moment.')
+    ).toBeInTheDocument();
+  });
+
+  it('clears the note when the next generation starts', async () => {
+    const user = userEvent.setup();
+    fetchMock
+      .mockResolvedValueOnce(ndjson([{ type: 'switch', from: 'claude', to: 'gemini' }, { type: 'plan', plan: makePlan(3) }]))
+      .mockResolvedValueOnce(planOk(3));
+    render(<Home />);
+    await fillAndSubmit(user);
+    await screen.findByText(/foi gerado com o Gemini/);
+
+    await user.click(screen.getByRole('button', { name: 'Gerar plano' }));
+    await waitFor(() => expect(screen.queryByText(/foi gerado com o Gemini/)).not.toBeInTheDocument());
+  });
+
+  it('does not show the note when every provider failed: only the error', async () => {
+    const user = userEvent.setup();
+    fetchMock.mockResolvedValueOnce(
+      ndjson([
+        { type: 'switch', from: 'claude', to: 'gemini' },
+        { type: 'error', error: { code: 'UPSTREAM_FAILED', message: 'raw' } },
+      ])
+    );
+    render(<Home />);
+    await fillAndSubmit(user);
+    expect(await screen.findByRole('alert')).toHaveTextContent('O serviço de IA não respondeu');
+    expect(screen.queryByText(/foi gerado com o Gemini/)).not.toBeInTheDocument();
+  });
+
+  it('shows no note when nothing switched', async () => {
+    const user = userEvent.setup();
+    fetchMock.mockResolvedValueOnce(planOk(3));
+    render(<Home />);
+    await fillAndSubmit(user);
+    await screen.findAllByRole('article');
+    expect(screen.queryByText(/estava indisponível/)).not.toBeInTheDocument();
+  });
+});
+
 // --- errors --------------------------------------------------------------------------------
 
 describe('<Home>: errors', () => {

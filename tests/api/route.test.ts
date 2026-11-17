@@ -13,6 +13,9 @@ const valid = { subject: 'SQL joins', hoursPerDay: 2, days: 3, level: 'intermedi
 const fetchMock = vi.fn<typeof fetch>();
 
 beforeEach(() => {
+  // This file exercises the Gemini pipeline; the Claude and failover paths live in route-providers.test.ts.
+  vi.stubEnv('AI_PROVIDER', 'gemini');
+  vi.stubEnv('ANTHROPIC_API_KEY', '');
   vi.stubEnv('GEMINI_API_KEY', API_KEY);
   vi.stubEnv('GEMINI_MODEL', '');
   vi.stubEnv('GEMINI_FALLBACK_MODEL', '');

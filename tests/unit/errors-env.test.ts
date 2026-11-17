@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getEnv } from '@/lib/env';
+import { getEnv, providerOrder } from '@/lib/env';
 import { AppError, toErrorBody } from '@/lib/errors';
 
 describe('toErrorBody', () => {
@@ -37,8 +37,9 @@ describe('toErrorBody', () => {
 });
 
 describe('getEnv', () => {
-  it('fails with a safe CONFIG_ERROR when the API key is missing', () => {
+  it('fails with a safe CONFIG_ERROR when no provider has an API key', () => {
     vi.stubEnv('GEMINI_API_KEY', '');
+    vi.stubEnv('ANTHROPIC_API_KEY', '');
     try {
       getEnv();
       expect.unreachable('should have thrown');
@@ -49,8 +50,9 @@ describe('getEnv', () => {
     }
   });
 
-  it('rejects a key made only of whitespace', () => {
+  it('rejects keys made only of whitespace', () => {
     vi.stubEnv('GEMINI_API_KEY', '   ');
+    vi.stubEnv('ANTHROPIC_API_KEY', '  ');
     expect(() => getEnv()).toThrow(AppError);
   });
 
@@ -92,7 +94,77 @@ describe('getEnv', () => {
 
   it('is lazy: importing the module does not require any variable', async () => {
     vi.stubEnv('GEMINI_API_KEY', '');
+    vi.stubEnv('ANTHROPIC_API_KEY', '');
     vi.resetModules();
     await expect(import('@/lib/env')).resolves.toBeDefined();
+  });
+});
+
+describe('AI provider configuration', () => {
+  const clearAll = () => {
+    for (const name of [
+      'AI_PROVIDER',
+      'ANTHROPIC_API_KEY',
+      'ANTHROPIC_MODEL',
+      'ANTHROPIC_EFFORT',
+      'ANTHROPIC_BASE_URL',
+      'GEMINI_API_KEY',
+      'GEMINI_MODEL',
+    ]) {
+      vi.stubEnv(name, '');
+    }
+  };
+
+  it('defaults to Claude, on a cheap model with low effort', () => {
+    clearAll();
+    vi.stubEnv('ANTHROPIC_API_KEY', 'ant-key');
+    const env = getEnv();
+    expect(env.AI_PROVIDER).toBe('claude');
+    expect(env.ANTHROPIC_MODEL).toBe('claude-haiku-5-5');
+    expect(env.ANTHROPIC_EFFORT).toBe('low');
+    expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
+  });
+
+  it('accepts overrides for the Anthropic settings', () => {
+    clearAll();
+    vi.stubEnv('ANTHROPIC_API_KEY', 'ant-key');
+    vi.stubEnv('ANTHROPIC_MODEL', 'claude-sonnet-5-5');
+    vi.stubEnv('ANTHROPIC_EFFORT', 'high');
+    vi.stubEnv('ANTHROPIC_BASE_URL', 'http://localhost:4010');
+    expect(getEnv()).toMatchObject({
+      ANTHROPIC_MODEL: 'claude-sonnet-5-5',
+      ANTHROPIC_EFFORT: 'high',
+      ANTHROPIC_BASE_URL: 'http://localhost:4010',
+    });
+  });
+
+  it.each([
+    ['an unknown provider', 'AI_PROVIDER', 'openai'],
+    ['an unknown effort', 'ANTHROPIC_EFFORT', 'max'],
+    ['a malformed base URL', 'ANTHROPIC_BASE_URL', 'not a url'],
+  ])('rejects %s', (_name, variable, value) => {
+    clearAll();
+    vi.stubEnv('ANTHROPIC_API_KEY', 'ant-key');
+    vi.stubEnv(variable, value);
+    expect(() => getEnv()).toThrow(AppError);
+  });
+
+  describe('providerOrder', () => {
+    const both = { ANTHROPIC_API_KEY: 'a', GEMINI_API_KEY: 'g' };
+
+    it('puts the configured provider first and the other one as the failover', () => {
+      expect(providerOrder({ AI_PROVIDER: 'claude', ...both })).toEqual(['claude', 'gemini']);
+      expect(providerOrder({ AI_PROVIDER: 'gemini', ...both })).toEqual(['gemini', 'claude']);
+    });
+
+    it('leaves out a provider that has no key', () => {
+      expect(providerOrder({ AI_PROVIDER: 'claude', GEMINI_API_KEY: 'g' })).toEqual(['gemini']);
+      expect(providerOrder({ AI_PROVIDER: 'claude', ANTHROPIC_API_KEY: 'a' })).toEqual(['claude']);
+      expect(providerOrder({ AI_PROVIDER: 'gemini', ANTHROPIC_API_KEY: 'a' })).toEqual(['claude']);
+    });
+
+    it('is empty when nothing is configured', () => {
+      expect(providerOrder({ AI_PROVIDER: 'claude' })).toEqual([]);
+    });
   });
 });

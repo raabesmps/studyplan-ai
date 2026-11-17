@@ -16,6 +16,7 @@ import { NDJSON_CONTENT_TYPE, readEvents } from '@/lib/stream';
 import { useT } from '@/lib/use-locale';
 import { usePlans } from '@/lib/use-plans';
 import type { Messages } from '@/lib/i18n';
+import type { ProviderName } from '@/lib/env';
 
 type ErrorKind = keyof Messages['errors'];
 type Announcement =
@@ -47,6 +48,8 @@ export default function Home() {
   const [cancelled, setCancelled] = useState(false);
   const [progressDay, setProgressDay] = useState<number | null>(null);
   const [retrying, setRetrying] = useState(false);
+  // Set when the first AI provider failed and another one answered.
+  const [switched, setSwitched] = useState<{ from: ProviderName; to: ProviderName } | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const [lastInput, setLastInput] = useState<PlanRequest | null>(null);
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
@@ -75,6 +78,7 @@ export default function Home() {
     setCancelled(false);
     setProgressDay(null);
     setRetrying(false);
+    setSwitched(null);
     setAnnouncement({ kind: 'generating' });
 
     try {
@@ -95,6 +99,10 @@ export default function Home() {
             setProgressDay(event.day);
           } else if (event.type === 'retry') {
             setRetrying(true);
+            setProgressDay(null);
+          } else if (event.type === 'switch') {
+            setSwitched({ from: event.from, to: event.to });
+            setRetrying(false);
             setProgressDay(null);
           } else if (event.type === 'plan') {
             planPayload = event.plan;
@@ -211,6 +219,12 @@ export default function Home() {
               </div>
             )}
 
+            {switched && !loading && !errorKind && (
+              <p className="mb-8 rounded-xl border border-line bg-surface p-4 text-muted print:hidden">
+                {t.notice.switched(t.providers[switched.from], t.providers[switched.to])}
+              </p>
+            )}
+
             {cancelled && !loading && (
               <p className="mb-8 rounded-xl border border-line bg-surface p-4 text-muted print:hidden">
                 {t.generating.cancelled}
@@ -223,6 +237,9 @@ export default function Home() {
                 total={lastInput?.days ?? 0}
                 day={progressDay}
                 retrying={retrying}
+                switchedMessage={
+                  switched ? t.generating.switching(t.providers[switched.from], t.providers[switched.to]) : null
+                }
                 onCancel={handleCancel}
               />
             ) : activePlan ? (

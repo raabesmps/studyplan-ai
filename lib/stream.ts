@@ -1,9 +1,11 @@
+import { PROVIDERS, type ProviderName } from './env';
 import type { ErrorBody } from './errors';
 
 /** Events sent by POST /api/generate-plan, one JSON object per line (NDJSON). */
 export type StreamEvent =
   | { type: 'progress'; day: number; total: number }
   | { type: 'retry' }
+  | { type: 'switch'; from: ProviderName; to: ProviderName } // the first AI provider failed; another takes over
   | { type: 'plan'; plan: unknown } // validated by the consumer with Plan.safeParse
   | ({ type: 'error' } & ErrorBody);
 
@@ -37,6 +39,10 @@ export function parseEventLine(line: string): StreamEvent | null {
         : null;
     case 'retry':
       return { type: 'retry' };
+    case 'switch': {
+      const known = (value: unknown): value is ProviderName => (PROVIDERS as readonly unknown[]).includes(value);
+      return known(raw.from) && known(raw.to) ? { type: 'switch', from: raw.from, to: raw.to } : null;
+    }
     case 'plan':
       return 'plan' in raw ? { type: 'plan', plan: raw.plan } : null;
     case 'error': {

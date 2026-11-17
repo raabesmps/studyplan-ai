@@ -28,6 +28,7 @@ describe('encodeEvent / parseEventLine', () => {
     const events: StreamEvent[] = [
       { type: 'progress', day: 2, total: 7 },
       { type: 'retry' },
+      { type: 'switch', from: 'claude', to: 'gemini' },
       { type: 'plan', plan: { subject: 'x' } },
       { type: 'error', error: { code: 'RATE_LIMITED', message: 'Devagar', retryAfter: 60 } },
     ];
@@ -44,6 +45,8 @@ describe('encodeEvent / parseEventLine', () => {
     ['not an object', '42'],
     ['unknown type', '{"type":"mystery"}'],
     ['progress without numbers', '{"type":"progress","day":"2"}'],
+    ['a switch to an unknown provider', '{"type":"switch","from":"claude","to":"openai"}'],
+    ['a switch without a target', '{"type":"switch","from":"claude"}'],
     ['error without a code', '{"type":"error","error":{"message":"x"}}'],
     ['plan event without a plan', '{"type":"plan"}'],
   ])('ignores a malformed line (%s)', (_name, line) => {

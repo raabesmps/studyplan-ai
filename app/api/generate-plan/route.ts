@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { generateStudyPlan } from '@/lib/ai/generate';
 import { getEnv } from '@/lib/env';
-import { generateStudyPlan } from '@/lib/gemini';
 import { AppError, toErrorBody } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { PlanRequest } from '@/lib/schema';
@@ -58,10 +58,11 @@ export async function POST(request: NextRequest) {
 
       try {
         const plan = await generateStudyPlan(input, {
-          // request.signal aborts when the visitor cancels or disconnects, which also stops the Gemini call.
+          // request.signal aborts when the visitor cancels or disconnects, which also stops the AI call.
           signal: request.signal,
           onProgress: (day, total) => send({ type: 'progress', day, total }),
           onRetry: () => send({ type: 'retry' }),
+          onSwitch: ({ from, to }) => send({ type: 'switch', from, to }),
         });
         send({ type: 'plan', plan });
       } catch (error) {

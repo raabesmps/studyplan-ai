@@ -93,8 +93,14 @@ const pt = {
   } satisfies Record<ErrorCode | 'network' | 'generic', string>,
   retry: 'Tentar de novo',
   retryIn: (minutes: number) => `Tente de novo em ${minutes} min.`,
+  providers: { claude: 'Claude', gemini: 'Gemini' },
+  notice: {
+    switched: (from: string, to: string) =>
+      `Este plano foi gerado com o ${to}, porque o ${from} estava indisponível no momento.`,
+  },
   generating: {
     title: (subject: string) => `Montando o plano de ${subject}`,
+    switching: (from: string, to: string) => `O ${from} não respondeu. Gerando com o ${to}…`,
     preparing: 'Preparando o roteiro…',
     writing: (day: number, total: number) => `Escrevendo o dia ${day} de ${total}…`,
     adjusting: 'Ajustando o formato do plano…',
@@ -197,8 +203,14 @@ const en: Messages = {
   },
   retry: 'Try again',
   retryIn: (minutes: number) => `Try again in ${minutes} min.`,
+  providers: { claude: 'Claude', gemini: 'Gemini' },
+  notice: {
+    switched: (from: string, to: string) =>
+      `This plan was generated with ${to} because ${from} was unavailable at the moment.`,
+  },
   generating: {
     title: (subject: string) => `Building the plan for ${subject}`,
+    switching: (from: string, to: string) => `${from} did not respond. Generating with ${to}…`,
     preparing: 'Preparing the route…',
     writing: (day: number, total: number) => `Writing day ${day} of ${total}…`,
     adjusting: 'Adjusting the plan format…',
