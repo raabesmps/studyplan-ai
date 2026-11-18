@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import { RotateCw } from 'lucide-react';
 import AppHeader from '@/components/AppHeader';
 import EmptyPlan from '@/components/EmptyPlan';
 import GeneratingPlan from '@/components/GeneratingPlan';
 import LegacyPlanView from '@/components/LegacyPlanView';
 import SavedPlans from '@/components/SavedPlans';
+import SiteFooter from '@/components/SiteFooter';
 import StudyPlanDisplay from '@/components/StudyPlanDisplay';
 import StudyPlanForm from '@/components/StudyPlanForm';
 import { logger } from '@/lib/logger';
@@ -186,14 +186,15 @@ export default function Home() {
       <AppHeader />
 
       <main id="main" className="mx-auto max-w-6xl px-4 pb-16 sm:px-6">
-        <div className="mb-8 max-w-3xl sm:mb-12 print:hidden">
-          <h1 className="text-balance text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-6xl">
+        <div className="mb-8 sm:mb-12 print:hidden">
+          {/* One line each on wide screens (the size follows the width so it always fits); wraps on phones. */}
+          <h1 className="text-balance text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl lg:whitespace-nowrap lg:text-[clamp(2rem,3.7vw,2.75rem)]">
             {t.hero.title}
           </h1>
-          <p className="mt-4 max-w-xl text-lg text-muted">{t.hero.text}</p>
+          <p className="mt-4 text-lg text-muted xl:whitespace-nowrap">{t.hero.text}</p>
         </div>
 
-        <div className="grid gap-x-12 gap-y-10 lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-start">
+        <div className="grid gap-x-12 gap-y-10 lg:grid-cols-[22rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:items-start">
           <div className="lg:col-start-1 lg:row-start-1 print:hidden">
             <StudyPlanForm onGenerate={handleGenerate} loading={loading} />
           </div>
@@ -276,15 +277,7 @@ export default function Home() {
         </div>
       </main>
 
-      <footer className="mx-auto max-w-6xl space-y-1 px-4 pb-10 text-sm text-muted sm:px-6 print:hidden">
-        <p>{t.footer.poweredBy}</p>
-        <p>{t.footer.privacy}</p>
-        <p>
-          <Link href="/status" className="text-pen underline underline-offset-2 hover:no-underline">
-            {t.footer.status}
-          </Link>
-        </p>
-      </footer>
+      <SiteFooter />
     </>
   );
 }

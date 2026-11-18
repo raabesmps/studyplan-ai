@@ -140,7 +140,7 @@ const pt = {
     loadFailed: 'Não foi possível consultar o status agora. Tente de novo em instantes.',
     owner: {
       title: 'Painel do dono',
-      intro: 'Uso, gasto estimado e endereços IP. Só abre com o token do dono.',
+      intro: 'Uso por dia, gasto estimado e saúde dos provedores. Só abre com o token do dono.',
       token: 'Token do dono',
       unlock: 'Entrar',
       lock: 'Sair',
@@ -164,13 +164,6 @@ const pt = {
       claudePlans: 'Claude',
       geminiPlans: 'Gemini',
       totalRow: 'Total do período',
-      ips: (date: string) => `Quem pediu planos em ${date}`,
-      ipsHint: 'Endereços IP são dados pessoais. Ficam guardados por 35 dias e só o dono os vê.',
-      ip: 'IP',
-      ipRequests: 'Pedidos',
-      ipPlans: 'Planos',
-      noIps: 'Nenhum pedido neste dia.',
-      showIps: (date: string) => `Ver IPs de ${date}`,
       providers: 'Provedores de IA: última falha e último plano entregue',
       lastFailure: 'Última falha',
       lastSuccess: 'Último plano',
@@ -192,9 +185,10 @@ const pt = {
     },
   },
   footer: {
-    poweredBy: 'Feito com Claude (Anthropic) e Gemini (Google)',
+    // {claude} and {gemini} are replaced by links to each provider.
+    madeWith: 'Feito com a API do {claude} e a API do {gemini}',
     privacy:
-      'Para limitar abusos, o endereço IP de quem gera planos fica guardado por 35 dias. Seus planos ficam só no seu navegador.',
+      'Para limitar abusos, seu IP é guardado só como um código embaralhado (hash), por no máximo 1 hora. Seus planos ficam apenas no seu navegador.',
     status: 'Status do serviço',
   },
 };
@@ -332,7 +326,7 @@ const en: Messages = {
     loadFailed: 'Could not read the status right now. Try again in a moment.',
     owner: {
       title: 'Owner panel',
-      intro: "Usage, estimated spend and IP addresses. It opens only with the owner's token.",
+      intro: "Usage per day, estimated spend and provider health. It opens only with the owner's token.",
       token: 'Owner token',
       unlock: 'Sign in',
       lock: 'Sign out',
@@ -356,13 +350,6 @@ const en: Messages = {
       claudePlans: 'Claude',
       geminiPlans: 'Gemini',
       totalRow: 'Period total',
-      ips: (date: string) => `Who asked for plans on ${date}`,
-      ipsHint: 'IP addresses are personal data. They are kept for 35 days and only the owner can see them.',
-      ip: 'IP',
-      ipRequests: 'Requests',
-      ipPlans: 'Plans',
-      noIps: 'No requests on this day.',
-      showIps: (date: string) => `Show IPs for ${date}`,
       providers: 'AI providers: last failure and last plan delivered',
       lastFailure: 'Last failure',
       lastSuccess: 'Last plan',
@@ -384,9 +371,10 @@ const en: Messages = {
     },
   },
   footer: {
-    poweredBy: 'Built with Claude (Anthropic) and Gemini (Google)',
+    // {claude} and {gemini} are replaced by links to each provider.
+    madeWith: 'Built with the {claude} API and the {gemini} API',
     privacy:
-      'To limit abuse, the IP address of whoever generates a plan is kept for 35 days. Your plans stay only in your browser.',
+      'To limit abuse, your IP is kept only as a scrambled code (a hash), for at most 1 hour. Your plans stay only in your browser.',
     status: 'Service status',
   },
 };

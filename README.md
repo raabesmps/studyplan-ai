@@ -88,7 +88,7 @@ Everything is documented in [`.env.example`](.env.example). The ones that matter
 | `DAILY_LIMIT` | Plans the whole app may generate per UTC day; after that visitors get a sample plan | `200` |
 | `RATE_LIMIT_DISABLED` | `true` to run without rate limiting (local use only) | `false` |
 | `DEMO_MODE` | `true` to serve sample plans only (no AI, no key) | `false` |
-| `STATUS_TOKEN` | Unlocks the owner's part of `/status` (usage, spend, IPs). 16+ characters, for example `openssl rand -hex 32`. Empty = that part is off | none |
+| `STATUS_TOKEN` | Unlocks the owner's part of `/status` (usage and spend). 16+ characters, for example `openssl rand -hex 32`. Empty = that part is off | none |
 | `STATUS_CACHE_SECONDS` | How long a service check on `/status` is reused | `30` |
 
 Keys live only in `.env.local`, which git ignores. They are read on the server and never sent to the browser.
@@ -121,13 +121,13 @@ The test suite never calls a real AI and never needs a key, locally or in CI.
 ## Status and monitoring
 
 - **[`/status`](https://studyplan.aquifunciona.dev.br/status)** is public and shows whether the site, Claude, Gemini and Upstash Redis are reachable, with the round trip of each. The checks use free calls (list models, `PING`), never a generation, and are cached for 30 seconds, so the page cannot be used to hammer the providers. It also says when the daily budget is spent and visitors are getting sample plans.
-- **The owner's panel**, on the same page, opens with `STATUS_TOKEN` and shows, per day for the last 14 days: requests, plans by Claude and by Gemini, sample plans, requests blocked by the limit, errors, provider switches, tokens and an **estimated spend**. It lists **which IP asked for how many plans** on any day, and why each provider last failed (billing, rejected key, rate limit, overload, timeout). The spend uses list prices for the configured Claude model and counts Gemini's free tier as free; the real bill is in the provider's console.
+- **The owner's panel**, on the same page, opens with `STATUS_TOKEN` and shows, per day for the last 14 days: requests, plans by Claude and by Gemini, sample plans, requests blocked by the limit, errors, provider switches, tokens and an **estimated spend**, plus why each provider last failed (billing, rejected key, rate limit, overload, timeout). It counts requests only: **nothing in it identifies a visitor**. The spend uses list prices for the configured Claude model and counts Gemini's free tier as free; the real bill is in the provider's console.
 - **The token is the only key to it.** It travels in an `Authorization` header (never a URL), is compared in constant time, and ten wrong guesses lock an address out for an hour. Without `STATUS_TOKEN` the owner's endpoints answer 404.
 - **Uptime:** [a GitHub Actions workflow](.github/workflows/uptime.yml) calls `/api/health` and `/api/status` every 10 minutes. A failed run (site down, or an API reported "down") makes GitHub email the owner. The app cannot report that it is itself down, so something outside it has to look.
 
 ### Privacy
 
-To limit abuse and show the owner who is using the app, the **IP address of whoever asks for a plan is stored for 35 days** (raw in the usage log, hashed in the rate limiter), then expires on its own. Only the owner's token can read it, and the home page says so. Plans and their content are never stored on the server: they stay in the visitor's browser. If you run your own copy, an IP address is personal data under laws like the GDPR and Brazil's LGPD, so keep or shorten that notice and period to match.
+The usage log is made of counters (requests, plans, errors, tokens per day) and expires after 35 days. **No IP address, raw or hashed, is written to it.** The only place an address is used is the rate limiter, which needs to tell visitors apart: it keeps a hash of the IP (not the IP) for the length of the window, **at most one hour**, then the key expires. The home page says so. Plans and their content are never stored on the server: they stay in the visitor's browser.
 
 ## Decisions worth knowing
 
@@ -158,7 +158,7 @@ lib/
   ai/                 Claude and Gemini providers and the failover orchestrator
   schema.ts           Zod schemas for requests, plans and validation rules
   rate-limit.ts       Upstash counters: per visitor and daily
-  usage.ts            What the app records per day (counts, tokens, IPs) and reads back
+  usage.ts            What the app records per day (counts and tokens, no IPs) and reads back
   service-status.ts   Free health checks of Claude, Gemini and Redis, cached
   admin-auth.ts       Owner token check with lockout
   sanitize.ts         Cleaning of untrusted text (markup, hidden characters)
@@ -220,7 +220,7 @@ Limite de 5 planos por hora por visitante e um teto diário para o app inteiro (
 
 ### Status e monitoramento
 
-A página `/status` mostra, publicamente, se o site, o Claude, o Gemini e o Redis estão no ar. Com o `STATUS_TOKEN`, o dono vê também requisições, planos, erros e **gasto estimado por dia**, e **quais IPs** pediram planos. Um workflow do GitHub verifica o site a cada 10 minutos e avisa por e-mail se algo cair. O IP de quem gera planos fica guardado por 35 dias (a home informa isso); é dado pessoal, então ajuste o aviso se usar uma cópia sua.
+A página `/status` mostra, publicamente, se o site, o Claude, o Gemini e o Redis estão no ar. Com o `STATUS_TOKEN`, o dono vê também requisições, planos, erros e **gasto estimado por dia**. Nada ali identifica visitantes: nenhum IP é gravado no registro de uso. Só o limitador de uso guarda um hash do IP, por no máximo 1 hora (a home informa isso). Um workflow do GitHub verifica o site a cada 10 minutos e avisa por e-mail se algo cair.
 
 ### Testes
 
