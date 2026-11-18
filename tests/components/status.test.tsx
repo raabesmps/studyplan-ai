@@ -45,13 +45,6 @@ const usage = (overrides: Record<string, unknown> = {}) => ({
     day('2026-03-09', { requests: 3, plans: 3, plansClaude: 3, costUsd: 0.006 }),
   ],
   totals: { requests: 12, plans: 9, samples: 1, rateLimited: 2, errors: 1, costUsd: 0.0183 },
-  ips: {
-    date: '2026-03-10',
-    rows: [
-      { ip: '203.0.113.7', requests: 6, plans: 5 },
-      { ip: '198.51.100.2', requests: 3, plans: 1 },
-    ],
-  },
   health: {
     claude: { lastFailure: { at: '2026-03-10T10:00:00.000Z', reason: 'billing' }, lastSuccess: '2026-03-10T11:00:00.000Z' },
     gemini: { lastFailure: null, lastSuccess: null },
@@ -218,32 +211,16 @@ describe('<StatusPage>: owner panel', () => {
     expect(within(table).getByRole('rowheader', { name: 'Total do período' })).toBeInTheDocument();
   });
 
-  it('lists who asked on the chosen day, and loads another day on demand', async () => {
+  it('shows no IP address anywhere: only counts per day', async () => {
     const user = userEvent.setup();
-    const asked: (string | null)[] = [];
-    route((url) => {
-      asked.push(url.searchParams.get('date'));
-      return json(url.searchParams.get('date') === '2026-03-09' ? usage({ ips: { date: '2026-03-09', rows: [{ ip: '192.0.2.44', requests: 3, plans: 3 }] } }) : usage());
-    });
     render(<StatusPage />);
     await signIn(user);
+    await screen.findByTestId('owner-data');
 
-    const ips = await screen.findByTestId('ip-table');
-    expect(within(ips).getByRole('rowheader', { name: '203.0.113.7' })).toBeInTheDocument();
-    expect(within(ips).getByRole('rowheader', { name: '198.51.100.2' })).toBeInTheDocument();
-    expect(screen.getByText(/Endereços IP são dados pessoais/)).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: 'Ver IPs de 2026-03-09' }));
-    expect(await within(await screen.findByTestId('ip-table')).findByRole('rowheader', { name: '192.0.2.44' })).toBeInTheDocument();
-    expect(asked).toEqual([null, '2026-03-09']);
-  });
-
-  it('says so when nobody asked on that day', async () => {
-    const user = userEvent.setup();
-    route(() => json(usage({ ips: { date: '2026-03-10', rows: [] } })));
-    render(<StatusPage />);
-    await signIn(user);
-    expect(await screen.findByText('Nenhum pedido neste dia.')).toBeInTheDocument();
+    expect(screen.queryByTestId('ip-table')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Endereços IP/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Ver IPs/ })).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/);
   });
 
   it('shows why each provider last failed, and the service detail with reasons', async () => {
@@ -294,15 +271,15 @@ describe('<StatusPage>: owner panel', () => {
     expect(sessionStorage.getItem('studyplan-ai:owner-token')).toBeNull();
   });
 
-  it('renders every value as text, so a hostile IP or reason cannot inject markup', async () => {
+  it('renders every value as text, so a hostile model name cannot inject markup', async () => {
     const user = userEvent.setup();
-    route(() => json(usage({ ips: { date: '2026-03-10', rows: [{ ip: '<img src=x onerror="window.__xss=1">', requests: 1, plans: 0 }] } })));
+    route(() => json(usage({ claudeModel: '<img src=x onerror="window.__xss=1">' })));
     render(<StatusPage />);
     await signIn(user);
     await screen.findByTestId('owner-data');
 
     expect(document.querySelector('img')).toBeNull();
-    expect(screen.getByText('<img src=x onerror="window.__xss=1">')).toBeInTheDocument();
+    expect(screen.getByText(/<img src=x onerror="window.__xss=1">/)).toBeInTheDocument();
     expect((window as unknown as { __xss?: number }).__xss).toBeUndefined();
   });
 });

@@ -6,9 +6,9 @@ import { estimateCost } from './pricing';
 import { pipeline, type RedisCommand } from './upstash';
 
 /**
- * What the app records about its own use, for the owner's part of the status page: counts per day,
- * tokens (for an estimate of the spend) and, per day, how often each IP asked. Raw IPs are personal
- * data, so everything expires after RETENTION_DAYS and only the owner's token can read it.
+ * What the app records about its own use, for the owner's part of the status page: counts per day and
+ * tokens (for an estimate of the spend). Nothing here identifies a visitor: no IP address, hashed or
+ * not, is ever written to the usage log. Everything expires after RETENTION_DAYS.
  */
 
 export const RETENTION_DAYS = 35;
@@ -18,7 +18,6 @@ const HEALTH_SECONDS = 7 * 24 * 3600;
 export type Outcome = 'plan' | 'sample' | 'rate_limited' | 'error' | 'cancelled';
 
 export interface UsageEvent {
-  ip: string;
   outcome: Outcome;
   /** The provider that delivered the plan (outcome "plan"). */
   provider?: ProviderName;
@@ -30,8 +29,6 @@ export interface UsageEvent {
 
 export const dayKey = (date: Date): string => date.toISOString().slice(0, 10);
 const statsKey = (day: string) => `studyplan:stats:${day}`;
-const ipsKey = (day: string) => `studyplan:ips:${day}`;
-const ipPlansKey = (day: string) => `studyplan:ipplans:${day}`;
 const healthKey = (kind: 'fail' | 'ok', provider: ProviderName) => `studyplan:${kind}:${provider}`;
 /** The app-wide daily counter kept by the rate limiter. */
 export const dailyCounterKey = (day: string) => `studyplan:day:${day}`;
@@ -62,11 +59,6 @@ export async function recordUsage(env: Env, event: UsageEvent, now: Date = new D
       if (tokens.output) count(`${provider}_out`, tokens.output);
     }
     commands.push(['EXPIRE', stats, RETENTION_SECONDS]);
-
-    commands.push(['HINCRBY', ipsKey(day), event.ip, 1], ['EXPIRE', ipsKey(day), RETENTION_SECONDS]);
-    if (event.outcome === 'plan') {
-      commands.push(['HINCRBY', ipPlansKey(day), event.ip, 1], ['EXPIRE', ipPlansKey(day), RETENTION_SECONDS]);
-    }
 
     const at = now.toISOString();
     for (const failure of event.failures ?? []) {
@@ -103,12 +95,6 @@ export interface DayStats {
   failovers: number;
   tokens: Record<ProviderName, { input: number; output: number }>;
   costUsd: number;
-}
-
-export interface IpRow {
-  ip: string;
-  requests: number;
-  plans: number;
 }
 
 export interface ProviderHealth {
@@ -165,20 +151,6 @@ export async function readDays(env: Env, days: number, now: Date = new Date()): 
     days: dates.map((date, i) => toDayStats(env, date, results[i])),
     usedToday: Number(results[dates.length]) || 0,
   };
-}
-
-/** Who asked on a given day, busiest first. */
-export async function readIps(env: Env, date: string, limit = 100): Promise<IpRow[]> {
-  const [requests, plans] = await pipeline(env, [
-    ['HGETALL', ipsKey(date)],
-    ['HGETALL', ipPlansKey(date)],
-  ]);
-  const asked = toRecord(requests);
-  const delivered = toRecord(plans);
-  return Object.entries(asked)
-    .map(([ip, count]) => ({ ip, requests: count, plans: delivered[ip] ?? 0 }))
-    .sort((a, b) => b.requests - a.requests || a.ip.localeCompare(b.ip))
-    .slice(0, limit);
 }
 
 const REASONS: readonly string[] = ['billing', 'auth', 'rate_limit', 'overloaded', 'timeout', 'invalid_response', 'unknown'];

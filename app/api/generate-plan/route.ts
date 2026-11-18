@@ -1,7 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { jsonError as respondWithError } from '@/lib/api-response';
 import { generateStudyPlan } from '@/lib/ai/generate';
-import { clientIp } from '@/lib/client-ip';
 import { pickDemoPlan } from '@/lib/demo';
 import { getEnv, rateLimitConfigured, type Env } from '@/lib/env';
 import { AppError, toErrorBody, type FailureReason } from '@/lib/errors';
@@ -41,7 +40,6 @@ const limiterActive = (env: Env) => rateLimitConfigured(env) && env.RATE_LIMIT_D
 export async function POST(request: NextRequest) {
   let input: PlanRequest;
   let env: Env;
-  const ip = clientIp(request.headers);
   try {
     assertSameOriginJson(request);
     const payload = await readJsonBody(request);
@@ -72,10 +70,10 @@ export async function POST(request: NextRequest) {
       if (!verdict.ok) {
         // The visitor's own quota is an error; the app-wide budget being spent just means a sample plan.
         if (verdict.scope === 'daily') {
-          await recordUsage(env, { ip, outcome: 'sample' });
+          await recordUsage(env, { outcome: 'sample' });
           return demoResponse(input, 'daily-limit');
         }
-        await recordUsage(env, { ip, outcome: 'rate_limited' });
+        await recordUsage(env, { outcome: 'rate_limited' });
         throw new AppError('RATE_LIMITED', 'Muitas tentativas em pouco tempo.', 429, { retryAfter: verdict.retryAfter });
       }
     } catch (error) {
@@ -100,7 +98,7 @@ export async function POST(request: NextRequest) {
       };
 
       // What this request used and how the providers behaved, written to the usage log at the end.
-      const usage: UsageEvent = { ip, outcome: 'error', tokens: {}, failures: [], failovers: 0 };
+      const usage: UsageEvent = { outcome: 'error', tokens: {}, failures: [], failovers: 0 };
       const addTokens = (provider: ProviderName, tokens: { inputTokens: number; outputTokens: number }) => {
         const soFar = usage.tokens![provider] ?? { input: 0, output: 0 };
         usage.tokens![provider] = { input: soFar.input + tokens.inputTokens, output: soFar.output + tokens.outputTokens };
