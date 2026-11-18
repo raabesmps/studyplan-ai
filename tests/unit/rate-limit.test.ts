@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createHash, createHmac } from 'node:crypto';
 import { AppError } from '@/lib/errors';
 import { getEnv } from '@/lib/env';
 import { checkRateLimit, visitorKey } from '@/lib/rate-limit';
@@ -61,17 +62,49 @@ describe('checkRateLimit: per-visitor quota', () => {
     const forwarded = new Headers({ 'x-forwarded-for': '203.0.113.9, 10.0.0.1, 10.0.0.2' });
     await checkRateLimit(getEnv(), forwarded, redis.now);
 
-    expect(await visitorKey(forwarded)).toBe(await visitorKey(new Headers({ 'x-forwarded-for': '203.0.113.9' })));
+    expect(await visitorKey(forwarded, TOKEN)).toBe(await visitorKey(new Headers({ 'x-forwarded-for': '203.0.113.9' }), TOKEN));
     const keys = [...redis.entries.keys()];
     expect(keys.some((key) => key.includes('203.0.113.9'))).toBe(false);
     expect(keys.some((key) => key.startsWith('studyplan:ip:'))).toBe(true);
   });
 
   it('falls back to x-real-ip, then to a shared bucket', async () => {
-    expect(await visitorKey(new Headers({ 'x-real-ip': '192.0.2.5' }))).toBe(
-      await visitorKey(new Headers({ 'x-forwarded-for': '192.0.2.5' }))
+    expect(await visitorKey(new Headers({ 'x-real-ip': '192.0.2.5' }), TOKEN)).toBe(
+      await visitorKey(new Headers({ 'x-forwarded-for': '192.0.2.5' }), TOKEN)
     );
-    expect(await visitorKey(new Headers())).toBe(await visitorKey(new Headers({ 'x-forwarded-for': 'unknown' })));
+    expect(await visitorKey(new Headers(), TOKEN)).toBe(
+      await visitorKey(new Headers({ 'x-forwarded-for': 'unknown' }), TOKEN)
+    );
+  });
+});
+
+describe('visitorKey: a keyed fingerprint, not a reversible hash', () => {
+  const headers = new Headers({ 'x-forwarded-for': '203.0.113.9' });
+
+  it('is an HMAC-SHA256 of the address with the server secret (first 12 bytes)', async () => {
+    const expected = createHmac('sha256', TOKEN).update('studyplan:visitor:203.0.113.9').digest('hex').slice(0, 24);
+    expect(await visitorKey(headers, TOKEN)).toBe(expected);
+  });
+
+  it('cannot be reproduced without the secret: it differs from a plain SHA-256 of the IP', async () => {
+    const plain = createHash('sha256').update('203.0.113.9').digest('hex').slice(0, 24);
+    expect(await visitorKey(headers, TOKEN)).not.toBe(plain);
+  });
+
+  it('changes when the secret changes, so a leaked key list cannot be matched against another deployment', async () => {
+    expect(await visitorKey(headers, 'another-secret-value')).not.toBe(await visitorKey(headers, TOKEN));
+  });
+
+  it('keeps different addresses apart and the same address together', async () => {
+    const other = new Headers({ 'x-forwarded-for': '203.0.113.10' });
+    expect(await visitorKey(other, TOKEN)).not.toBe(await visitorKey(headers, TOKEN));
+    expect(await visitorKey(new Headers({ 'x-forwarded-for': '203.0.113.9' }), TOKEN)).toBe(await visitorKey(headers, TOKEN));
+  });
+
+  it('is 24 hex characters and never contains the address', async () => {
+    const key = await visitorKey(headers, TOKEN);
+    expect(key).toMatch(/^[0-9a-f]{24}$/);
+    expect(key).not.toContain('203');
   });
 });
 

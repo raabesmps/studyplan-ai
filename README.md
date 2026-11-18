@@ -108,7 +108,7 @@ The test suite never calls a real AI and never needs a key, locally or in CI.
 
 ## Security
 
-- **Rate limiting**: 5 plans per hour per visitor and a daily cap for the whole app, both in Upstash. IPs are stored hashed. If the limiter is down the request is refused (fail closed), and production refuses to start without it.
+- **Rate limiting**: 5 plans per hour per visitor and a daily cap for the whole app, both in Upstash. IPs are never stored: the key is a keyed fingerprint (HMAC-SHA256 with a server secret), which unlike a plain hash cannot be reversed by trying every IPv4 address. If the limiter is down the request is refused (fail closed), and production refuses to start without it.
 - **Content Security Policy** with a per-request nonce: no `unsafe-inline` or `unsafe-eval` for scripts. Plus `nosniff`, frame denial, referrer and permissions policies and HSTS.
 - **No secret reaches the browser**, and upstream error messages are never forwarded: the client only receives a code and a safe message.
 - **Untrusted text is cleaned.** Everything the model writes (and the visitor's subject, and what comes back from `localStorage`) is stripped of HTML, `<script>`/`<style>` blocks, control characters and invisible ones (bidi overrides, zero-width and Unicode "tag" characters that can hide instructions) before it is shown, saved or exported. Field lengths are bounded, a text that is only markup is rejected, and Markdown exports escape brackets so plan text cannot become a link or an image. React escapes the rest; there is no HTML injection anywhere.
@@ -127,7 +127,7 @@ The test suite never calls a real AI and never needs a key, locally or in CI.
 
 ### Privacy
 
-The usage log is made of counters (requests, plans, errors, tokens per day) and expires after 35 days. **No IP address, raw or hashed, is written to it.** The only place an address is used is the rate limiter, which needs to tell visitors apart: it keeps a hash of the IP (not the IP) for the length of the window, **at most one hour**, then the key expires. The home page says so. Plans and their content are never stored on the server: they stay in the visitor's browser.
+The usage log is made of counters (requests, plans, errors, tokens per day) and expires after 35 days. **No IP address, raw or hashed, is written to it.** The only place an address is used is the rate limiter, which needs to tell visitors apart: it keeps a keyed fingerprint of the IP (an HMAC with a server secret, so it cannot be reversed by trying every address, and it is not the IP) for the length of the window, **at most one hour**, then the key expires. The home page says so. Plans and their content are never stored on the server: they stay in the visitor's browser.
 
 ## Decisions worth knowing
 

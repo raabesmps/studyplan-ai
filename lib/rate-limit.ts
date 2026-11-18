@@ -27,11 +27,17 @@ async function hit(env: Env, key: string, windowSeconds: number): Promise<{ coun
   return { count, secondsLeft: ttl };
 }
 
-/** The first hop's address, hashed so the store never holds a raw IP. */
-export async function visitorKey(headers: Headers): Promise<string> {
-  const ip = clientIp(headers);
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ip));
-  return Array.from(new Uint8Array(digest).slice(0, 12), (byte) => byte.toString(16).padStart(2, '0')).join('');
+/**
+ * A keyed fingerprint of the visitor's address (the first hop of x-forwarded-for), so the store never
+ * holds a raw IP. It is an HMAC with a server secret, not a plain hash: there are only about four
+ * billion IPv4 addresses, so a plain SHA-256 could be reversed by trying them all, while without the
+ * secret an HMAC cannot. Changing the secret simply starts every visitor's count again.
+ */
+export async function visitorKey(headers: Headers, secret: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = await crypto.subtle.sign('HMAC', key, encoder.encode(`studyplan:visitor:${clientIp(headers)}`));
+  return Array.from(new Uint8Array(mac).slice(0, 12), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 const secondsUntilNextUtcDay = (now: Date): number =>
@@ -46,7 +52,7 @@ const secondsUntilNextUtcDay = (now: Date): number =>
  */
 export async function checkRateLimit(env: Env, headers: Headers, now: Date = new Date()): Promise<RateLimitResult> {
   try {
-    const visitor = await visitorKey(headers);
+    const visitor = await visitorKey(headers, env.UPSTASH_REDIS_REST_TOKEN!);
     const perVisitor = await hit(env, `studyplan:ip:${visitor}`, env.RATE_LIMIT_WINDOW_SECONDS);
     if (perVisitor.count > env.RATE_LIMIT_MAX) {
       return { ok: false, scope: 'ip', retryAfter: perVisitor.secondsLeft };
