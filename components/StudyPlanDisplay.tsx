@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Calendar, Clock, GraduationCap, X } from 'lucide-react';
 import DayCard from './DayCard';
 import ExportActions from './ExportActions';
@@ -17,6 +18,10 @@ interface StudyPlanDisplayProps {
 export default function StudyPlanDisplay({ saved, onClose }: StudyPlanDisplayProps) {
   const { t } = useT();
   const { plan, completed } = saved;
+  // One day open at a time, and the first one when a plan appears. Opening a day closes the others;
+  // opening the one that is open closes it (null). The parent keys this component by plan id, so a
+  // different plan starts again from day 1.
+  const [openDay, setOpenDay] = useState<number | null>(plan.days[0]?.day ?? null);
 
   const onToggleExercise = (day: Day, index: number) =>
     updateProgress(saved.id, toggleExercise(completed, day, index));
@@ -75,6 +80,8 @@ export default function StudyPlanDisplay({ saved, onClose }: StudyPlanDisplayPro
             isLast={i === plan.days.length - 1}
             done={completed[String(day.day)] ?? []}
             complete={isDayComplete(completed, day)}
+            open={openDay === day.day}
+            onToggleOpen={() => setOpenDay((current) => (current === day.day ? null : day.day))}
             onToggleExercise={(index) => onToggleExercise(day, index)}
             onToggleDay={() => onToggleDay(day)}
           />
