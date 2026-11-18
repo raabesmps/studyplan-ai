@@ -1,5 +1,5 @@
 import type { Env } from '../env';
-import { AppError } from '../errors';
+import { AppError, type FailureReason } from '../errors';
 import { geminiPlanSchema } from '../gemini-schema';
 import { logger } from '../logger';
 import type { AiProvider, StreamRequest } from './types';
@@ -11,6 +11,7 @@ const FALLBACK_MODEL_TIMEOUT_MS = 45_000;
 interface GenerateContentChunk {
   candidates?: { content?: { parts?: { text?: string }[] } }[];
   error?: { code?: number; message?: string };
+  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
 }
 
 /** An upstream failure that is worth retrying on the fallback model (429 or 5xx). */
@@ -58,12 +59,14 @@ function upstreamStatusError(status: number): AppError {
     return new RetryableUpstreamError(
       'RATE_LIMITED',
       'Muitas requisições ao serviço de IA. Aguarde um pouco e tente de novo.',
-      429
+      429,
+      { reason: 'rate_limit' }
     );
   }
   const message = 'O serviço de IA falhou. Tente novamente.';
-  if (status >= 500) return new RetryableUpstreamError('UPSTREAM_FAILED', message, 502);
-  return new AppError('UPSTREAM_FAILED', message, 502);
+  if (status >= 500) return new RetryableUpstreamError('UPSTREAM_FAILED', message, 502, { reason: 'overloaded' });
+  const reason: FailureReason = status === 401 || status === 403 ? 'auth' : 'unknown';
+  return new AppError('UPSTREAM_FAILED', message, 502, { reason });
 }
 
 /** Aborts caused by the caller pass through untouched; anything else is an upstream failure. */
@@ -75,13 +78,14 @@ function toUpstreamError(error: unknown, model: string, signal?: AbortSignal): u
   logger.warn(`Request to ${model} failed:`, error);
   return new AppError('UPSTREAM_FAILED', 'O serviço de IA não respondeu a tempo. Tente novamente.', 502, {
     cause: error,
+    reason: 'timeout',
   });
 }
 
 async function streamModel(
   env: Env,
   model: string,
-  { prompt, signal, onText }: Pick<StreamRequest, 'prompt' | 'signal' | 'onText'>,
+  { prompt, signal, onText, onUsage }: Pick<StreamRequest, 'prompt' | 'signal' | 'onText' | 'onUsage'>,
   timeoutMs: number
 ): Promise<string> {
   logger.info(`Calling Gemini model ${model}`);
@@ -125,8 +129,11 @@ async function streamModel(
   }
 
   let text = '';
+  // The last chunk that carries usageMetadata holds the totals for the whole call.
+  let usage: GenerateContentChunk['usageMetadata'];
   try {
     for await (const chunk of readSse(response.body)) {
+      if (chunk.usageMetadata) usage = chunk.usageMetadata;
       if (chunk.error) {
         // The model can fail mid-stream (e.g. 503 under load); never accept the truncated text.
         logger.warn(`Gemini model ${model} failed mid-stream:`, chunk.error.message);
@@ -143,6 +150,13 @@ async function streamModel(
     throw error instanceof AppError ? error : toUpstreamError(error, model, signal);
   }
 
+  if (usage) {
+    // Thinking tokens are billed as output.
+    onUsage?.({
+      inputTokens: usage.promptTokenCount ?? 0,
+      outputTokens: (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0),
+    });
+  }
   if (!text) {
     throw new AppError('INVALID_RESPONSE', 'A IA devolveu uma resposta vazia. Tente gerar de novo.', 502);
   }

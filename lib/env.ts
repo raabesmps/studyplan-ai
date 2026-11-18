@@ -37,6 +37,12 @@ const EnvSchema = z.object({
   RATE_LIMIT_DISABLED: z.enum(['true', 'false']).default('false'),
   // "true" serves sample plans and never calls an AI provider (no API key needed).
   DEMO_MODE: z.enum(['true', 'false']).default('false'),
+
+  // Unlocks the owner's part of the status page (usage per day, per IP, estimated spend). Unset = that
+  // part does not exist. Long on purpose: it is the only thing between the internet and visitors' IPs.
+  STATUS_TOKEN: z.string().trim().min(16, 'STATUS_TOKEN must have at least 16 characters').optional(),
+  // How long a service check is reused, so the status page cannot be used to hammer the providers.
+  STATUS_CACHE_SECONDS: z.coerce.number().int().min(0).max(600).default(30),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
@@ -64,6 +70,8 @@ export function getEnv(): Env {
     DAILY_LIMIT: read('DAILY_LIMIT'),
     RATE_LIMIT_DISABLED: read('RATE_LIMIT_DISABLED'),
     DEMO_MODE: read('DEMO_MODE'),
+    STATUS_TOKEN: read('STATUS_TOKEN'),
+    STATUS_CACHE_SECONDS: read('STATUS_CACHE_SECONDS'),
   });
 
   const fail = (cause: unknown): never => {

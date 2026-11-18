@@ -10,6 +10,14 @@ export interface StreamRequest {
   timeoutMs: number;
   /** Receives the text generated so far, every time it grows. */
   onText: (textSoFar: string) => void;
+  /** Called once per upstream call that finished, with what it cost in tokens. */
+  onUsage?: (usage: TokenUsage) => void;
+}
+
+/** Tokens a call used, as the provider reports them. */
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
 }
 
 /**
