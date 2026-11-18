@@ -34,7 +34,7 @@ export async function authorizeOwner(request: Request, env: Env): Promise<void> 
   if (!env.STATUS_TOKEN) throw NOT_FOUND();
   if (!rateLimitConfigured(env)) throw new AppError('CONFIG_ERROR', 'O serviço não está configurado.', 500);
 
-  const key = `studyplan:adminfail:${await visitorKey(request.headers)}`;
+  const key = `studyplan:adminfail:${await visitorKey(request.headers, env.UPSTASH_REDIS_REST_TOKEN!)}`;
   const known = safeEqual(bearerToken(request), env.STATUS_TOKEN);
 
   try {
