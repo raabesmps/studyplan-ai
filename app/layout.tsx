@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { Bricolage_Grotesque } from 'next/font/google';
+import { Analytics } from '@vercel/analytics/next';
 import { THEME_STORAGE_KEY } from '@/lib/theme-storage';
 import './globals.css';
 
@@ -35,7 +36,10 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       <head>
         <script nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }
