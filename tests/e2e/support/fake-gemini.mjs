@@ -19,6 +19,8 @@
 // Claude is served at POST /v1/messages and Gemini at POST /<anything>/models/<model>:streamGenerateContent.
 // It also stands in for Upstash Redis (POST /pipeline with INCR, EXPIRE [NX] and TTL, real clock) so the
 // rate limiter can be exercised. POST /__redis/reset clears it; POST /__redis/set?key=K&value=N presets a counter.
+// POST /__service?claude=500&gemini=429&redis=500 makes the free health-check calls (Claude and Gemini
+// "list models", Redis) answer with that status; use 200 to bring a service back.
 // Inspect or reset what the app sent with GET /__log and POST /__reset.
 import http from 'node:http';
 
@@ -153,7 +155,7 @@ async function handleClaude(req, res) {
 }
 
 // --- Upstash Redis (REST pipeline) ---------------------------------------------------------
-const redis = new Map(); // key -> { value, expiresAt | null }
+const redis = new Map(); // key -> { kind: 'string', value, expiresAt } | { kind: 'hash', fields: Map, expiresAt }
 const redisEntry = (key) => {
   const entry = redis.get(key);
   if (entry && entry.expiresAt !== null && entry.expiresAt <= Date.now()) redis.delete(key);
@@ -162,25 +164,56 @@ const redisEntry = (key) => {
 
 function redisCommand([name, key, ...args]) {
   const k = String(key);
-  if (name === 'INCR') {
-    const entry = redisEntry(k) ?? { value: 0, expiresAt: null };
-    entry.value += 1;
-    redis.set(k, entry);
-    return { result: entry.value };
+  switch (name) {
+    case 'PING':
+      return { result: 'PONG' };
+    case 'INCR': {
+      const entry = redisEntry(k);
+      const next = (entry?.kind === 'string' ? Number(entry.value) : 0) + 1;
+      redis.set(k, { kind: 'string', value: String(next), expiresAt: entry?.expiresAt ?? null });
+      return { result: next };
+    }
+    case 'GET': {
+      const entry = redisEntry(k);
+      return { result: entry?.kind === 'string' ? entry.value : null };
+    }
+    case 'SET': {
+      const ex = args.indexOf('EX');
+      redis.set(k, { kind: 'string', value: String(args[0]), expiresAt: ex >= 0 ? Date.now() + Number(args[ex + 1]) * 1000 : null });
+      return { result: 'OK' };
+    }
+    case 'DEL':
+      return { result: redis.delete(k) ? 1 : 0 };
+    case 'EXPIRE': {
+      const entry = redisEntry(k);
+      if (!entry || (args[1] === 'NX' && entry.expiresAt !== null)) return { result: 0 };
+      entry.expiresAt = Date.now() + Number(args[0]) * 1000;
+      return { result: 1 };
+    }
+    case 'TTL': {
+      const entry = redisEntry(k);
+      if (!entry) return { result: -2 };
+      return { result: entry.expiresAt === null ? -1 : Math.ceil((entry.expiresAt - Date.now()) / 1000) };
+    }
+    case 'HINCRBY': {
+      const entry = redisEntry(k);
+      const hash = entry?.kind === 'hash' ? entry : { kind: 'hash', fields: new Map(), expiresAt: null };
+      const next = Number(hash.fields.get(String(args[0])) ?? 0) + Number(args[1]);
+      hash.fields.set(String(args[0]), String(next));
+      redis.set(k, hash);
+      return { result: next };
+    }
+    case 'HGETALL': {
+      const entry = redisEntry(k);
+      return { result: entry?.kind === 'hash' ? [...entry.fields].flat() : [] };
+    }
+    default:
+      return { error: `ERR unknown command '${name}'` };
   }
-  if (name === 'EXPIRE') {
-    const entry = redisEntry(k);
-    if (!entry || (args[1] === 'NX' && entry.expiresAt !== null)) return { result: 0 };
-    entry.expiresAt = Date.now() + Number(args[0]) * 1000;
-    return { result: 1 };
-  }
-  if (name === 'TTL') {
-    const entry = redisEntry(k);
-    if (!entry) return { result: -2 };
-    return { result: entry.expiresAt === null ? -1 : Math.ceil((entry.expiresAt - Date.now()) / 1000) };
-  }
-  return { error: `ERR unknown command '${name}'` };
 }
+
+// Status the "list models" and PING health checks answer with, so tests can simulate an outage.
+const serviceStatus = { claude: 200, gemini: 200, redis: 200 };
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
@@ -188,6 +221,10 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && url.pathname === '/pipeline') {
     const authorized = req.headers.authorization === 'Bearer e2e-upstash-token';
     const body = await readBody(req);
+    if (serviceStatus.redis !== 200) {
+      res.writeHead(serviceStatus.redis, { 'Content-Type': 'application/json' }).end('{"error":"down"}');
+      return;
+    }
     if (!authorized) {
       res.writeHead(401, { 'Content-Type': 'application/json' }).end('{"error":"Unauthorized"}');
       return;
@@ -201,7 +238,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   if (req.method === 'POST' && url.pathname === '/__redis/set') {
-    redis.set(url.searchParams.get('key'), { value: Number(url.searchParams.get('value')), expiresAt: Date.now() + 3_600_000 });
+    redis.set(url.searchParams.get('key'), { kind: 'string', value: String(url.searchParams.get('value')), expiresAt: Date.now() + 3_600_000 });
     res.writeHead(204).end();
     return;
   }
@@ -214,6 +251,26 @@ const server = http.createServer(async (req, res) => {
     log.length = 0;
     callsBySubject.clear();
     res.writeHead(204).end();
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/__service') {
+    for (const [name, value] of url.searchParams) if (name in serviceStatus) serviceStatus[name] = Number(value);
+    res.writeHead(204).end();
+    return;
+  }
+  if (req.method === 'GET' && url.pathname === '/v1/models') {
+    const status = serviceStatus.claude;
+    res.writeHead(status, { 'Content-Type': 'application/json' }).end(
+      status === 200
+        ? JSON.stringify({ data: [], has_more: false, first_id: null, last_id: null })
+        : JSON.stringify({ type: 'error', error: { type: 'api_error', message: 'simulated outage' } })
+    );
+    return;
+  }
+  if (req.method === 'GET' && url.pathname.endsWith('/v1beta/models')) {
+    const status = serviceStatus.gemini;
+    res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(status === 200 ? { models: [] } : { error: { code: status, message: 'simulated outage' } }));
     return;
   }
 
@@ -302,6 +359,7 @@ const server = http.createServer(async (req, res) => {
     if (res.destroyed) return;
     sse(res, chunk(parts[i]));
   }
+  sse(res, { usageMetadata: { promptTokenCount: 400, candidatesTokenCount: 2000, thoughtsTokenCount: 0 } });
   finish();
 });
 

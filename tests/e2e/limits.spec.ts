@@ -3,7 +3,8 @@ import { expect, test } from '@playwright/test';
 import { ALERT, FAKE_GEMINI, PLAN_SECTION, generate, upstreamCalls } from './helpers';
 
 // This instance runs with the rate limiter on (3 plans per visitor), against the fake Upstash.
-// The tests share that fake store, so they run one after another; each one is a different "visitor".
+// The fake store is shared with the status page tests, which run at the same time, so nothing here
+// clears it: every test is its own "visitor" (an x-forwarded-for address nobody else uses).
 test.describe.configure({ mode: 'serial' });
 
 const APP = 'http://localhost:3102';
@@ -11,13 +12,8 @@ const body = (subject: string, days = 2) => ({ subject, hoursPerDay: 1, days, le
 const subject = () => `SCENARIO:ok ${randomUUID().slice(0, 8)}`;
 const today = () => new Date().toISOString().slice(0, 10);
 
-test.beforeEach(async ({ request }) => {
-  await request.post(`${FAKE_GEMINI}/__redis/reset`);
-});
-
 test.describe('per-visitor limit', () => {
-  const ip = '198.51.100.10';
-  test.use({ baseURL: APP, extraHTTPHeaders: { 'x-forwarded-for': ip } });
+  test.use({ baseURL: APP, extraHTTPHeaders: { 'x-forwarded-for': '198.51.100.10' } });
 
   test('refuses the 4th plan with 429 and Retry-After, without calling the AI', async ({ request }) => {
     const s = subject();
@@ -32,6 +28,11 @@ test.describe('per-visitor limit', () => {
 
     expect(await upstreamCalls(request, s)).toHaveLength(3);
   });
+
+});
+
+test.describe('what the visitor sees when over the limit', () => {
+  test.use({ baseURL: APP, extraHTTPHeaders: { 'x-forwarded-for': '198.51.100.11' } });
 
   test('tells the visitor how long to wait', async ({ page, request }) => {
     for (let i = 0; i < 3; i++) await request.post('/api/generate-plan', { data: body(subject()) });
@@ -62,6 +63,11 @@ test.describe('another visitor', () => {
 
 test.describe('daily cap', () => {
   test.use({ baseURL: APP, extraHTTPHeaders: { 'x-forwarded-for': '198.51.100.30' } });
+
+  // Give the app its budget back even if the test failed: the status page tests share this instance.
+  test.afterEach(async ({ request }) => {
+    await request.post(`${FAKE_GEMINI}/__redis/set?key=studyplan:day:${today()}&value=0`);
+  });
 
   test('shows a clearly marked sample plan, and the AI is not called', async ({ page, request }) => {
     await request.post(`${FAKE_GEMINI}/__redis/set?key=studyplan:day:${today()}&value=1000`);

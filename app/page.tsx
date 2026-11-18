@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { RotateCw } from 'lucide-react';
 import AppHeader from '@/components/AppHeader';
 import EmptyPlan from '@/components/EmptyPlan';
@@ -275,15 +276,14 @@ export default function Home() {
         </div>
       </main>
 
-      <footer className="mx-auto max-w-6xl px-4 pb-10 text-sm text-muted sm:px-6 print:hidden">
-        <a
-          href="https://ai.google.dev/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-pen underline underline-offset-2 hover:no-underline"
-        >
-          {t.footer.poweredBy}
-        </a>
+      <footer className="mx-auto max-w-6xl space-y-1 px-4 pb-10 text-sm text-muted sm:px-6 print:hidden">
+        <p>{t.footer.poweredBy}</p>
+        <p>{t.footer.privacy}</p>
+        <p>
+          <Link href="/status" className="text-pen underline underline-offset-2 hover:no-underline">
+            {t.footer.status}
+          </Link>
+        </p>
       </footer>
     </>
   );
