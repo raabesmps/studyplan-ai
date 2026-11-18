@@ -188,7 +188,7 @@ const pt = {
     // {claude} and {gemini} are replaced by links to each provider.
     madeWith: 'Feito com a API do {claude} e a API do {gemini}',
     privacy:
-      'Para limitar abusos, seu IP é guardado só como um código embaralhado (hash), por no máximo 1 hora. Seus planos ficam apenas no seu navegador.',
+      'Para limitar abusos, seu IP é guardado só como um código embaralhado (hash), por no máximo 1 hora. Seus planos ficam apenas no seu navegador. A Vercel conta as visitas de forma anônima, sem cookies.',
     status: 'Status do serviço',
   },
 };
@@ -374,7 +374,7 @@ const en: Messages = {
     // {claude} and {gemini} are replaced by links to each provider.
     madeWith: 'Built with the {claude} API and the {gemini} API',
     privacy:
-      'To limit abuse, your IP is kept only as a scrambled code (a hash), for at most 1 hour. Your plans stay only in your browser.',
+      'To limit abuse, your IP is kept only as a scrambled code (a hash), for at most 1 hour. Your plans stay only in your browser. Vercel counts visits anonymously, without cookies.',
     status: 'Service status',
   },
 };

@@ -127,7 +127,7 @@ The test suite never calls a real AI and never needs a key, locally or in CI.
 
 ### Privacy
 
-The usage log is made of counters (requests, plans, errors, tokens per day) and expires after 35 days. **No IP address, raw or hashed, is written to it.** The only place an address is used is the rate limiter, which needs to tell visitors apart: it keeps a keyed fingerprint of the IP (an HMAC with a server secret, so it cannot be reversed by trying every address, and it is not the IP) for the length of the window, **at most one hour**, then the key expires. The home page says so. Plans and their content are never stored on the server: they stay in the visitor's browser.
+The usage log is made of counters (requests, plans, errors, tokens per day) and expires after 35 days. **No IP address, raw or hashed, is written to it.** The only place an address is used is the rate limiter, which needs to tell visitors apart: it keeps a keyed fingerprint of the IP (an HMAC with a server secret, so it cannot be reversed by trying every address, and it is not the IP) for the length of the window, **at most one hour**, then the key expires. The home page says so. Plans and their content are never stored on the server: they stay in the visitor's browser. The one other thing that counts visitors is [Vercel Web Analytics](https://vercel.com/docs/analytics), which only runs on the Vercel deployment: it counts page views without cookies and without following people across sites, and it is the only third-party script on the page.
 
 ## Decisions worth knowing
 
