@@ -1,13 +1,14 @@
+import { cleanText } from './sanitize';
 import type { PlanRequest } from './schema';
 
 const LANGUAGE_NAMES = { pt: 'Brazilian Portuguese', en: 'English' } as const;
 
-/** Keeps user text on one line and prevents it from closing our delimiter tag. */
+/**
+ * Keeps user text on one line, without markup, control or invisible characters (which can hide
+ * instructions) and prevents it from closing our delimiter tag.
+ */
 export function sanitizeSubject(subject: string): string {
-  return subject
-    .replace(/<\/?\s*subject\s*>/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return cleanText(subject.replace(/<\/?\s*subject\s*>/gi, ''));
 }
 
 export function buildPrompt(input: PlanRequest): string {
@@ -33,5 +34,6 @@ Rules:
 - Each day needs: a short title, a one-sentence objective, 2 to 5 topics, 2 to 4 practical exercises, up to 3 resources, and "minutes" close to the daily time budget (${minutes}).
 - Resources: give a descriptive "title" and a web search "query" the learner can type into a search engine. Never output URLs or links.
 - Set "subject" to the topic and "level" to "${level}".
+- Every text value must be plain text: no HTML, no Markdown, no code blocks and no URLs.
 - Return only the JSON object.`;
 }

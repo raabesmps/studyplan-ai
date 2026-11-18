@@ -115,7 +115,7 @@ describe('<StudyPlanDisplay>: progress', () => {
 });
 
 describe('<StudyPlanDisplay>: content safety and structure', () => {
-  it('renders plan text as text, never as HTML', () => {
+  it('strips markup from stored plans and never renders plan text as HTML', () => {
     const plan = makePlan(1);
     plan.days[0].title = '<img src=x onerror="window.__xss = 1"> Joins';
     plan.days[0].exercises = ['<script>window.__xss = 2</script> exercício'];
@@ -123,7 +123,11 @@ describe('<StudyPlanDisplay>: content safety and structure', () => {
     const { container } = render(<Harness />);
     expect(container.querySelector('img')).toBeNull();
     expect(container.querySelector('script')).toBeNull();
-    expect(screen.getByText(/<img src=x/)).toBeInTheDocument();
+    // Browser storage is untrusted: the markup is removed when the plan is read back, and React
+    // would have escaped what was left anyway.
+    expect(container.innerHTML).not.toContain('onerror');
+    expect(screen.getByText('Joins')).toBeInTheDocument();
+    expect(screen.getByText('exercício')).toBeInTheDocument(); // the script and its code are gone
     expect((window as unknown as { __xss?: number }).__xss).toBeUndefined();
   });
 

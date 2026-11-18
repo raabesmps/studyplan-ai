@@ -108,7 +108,11 @@ The test suite never calls a real AI and never needs a key, locally or in CI.
 - **Rate limiting**: 5 plans per hour per visitor and a daily cap for the whole app, both in Upstash. IPs are stored hashed. If the limiter is down the request is refused (fail closed), and production refuses to start without it.
 - **Content Security Policy** with a per-request nonce: no `unsafe-inline` or `unsafe-eval` for scripts. Plus `nosniff`, frame denial, referrer and permissions policies and HSTS.
 - **No secret reaches the browser**, and upstream error messages are never forwarded: the client only receives a code and a safe message.
+- **Untrusted text is cleaned.** Everything the model writes (and the visitor's subject, and what comes back from `localStorage`) is stripped of HTML, `<script>`/`<style>` blocks, control characters and invisible ones (bidi overrides, zero-width and Unicode "tag" characters that can hide instructions) before it is shown, saved or exported. Field lengths are bounded, a text that is only markup is rejected, and Markdown exports escape brackets so plan text cannot become a link or an image. React escapes the rest; there is no HTML injection anywhere.
+- **Prompt injection is contained**: the subject sits between delimiter tags it cannot forge, the model is told it is data, and its output must pass a strict schema. Nothing the model says is ever executed.
+- **Only this site can call the API.** Bodies must be `application/json` (a cross-site page cannot send that without a CORS preflight) and `Origin` / `Sec-Fetch-Site` must point at this site. API responses are `no-store` and `Cross-Origin-Resource-Policy: same-origin`.
 - **Request bodies over 4 KB are rejected** before parsing.
+- A [`security.txt`](public/.well-known/security.txt) says where to report a vulnerability.
 - **Dependencies**: `npm audit` on runtime dependencies gates the CI, and Dependabot proposes weekly minor and patch updates.
 
 ## Decisions worth knowing

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Language, Plan } from './schema';
+import { Language, Plan, parsePlan } from './schema';
 
 const STORAGE_KEY = 'studyplan-ai:v2';
 const LEGACY_KEY = 'studyplan-ai-plans';
@@ -50,7 +50,11 @@ export function parseStoredPlans(raw: string | null): SavedPlan[] {
   if (!doc.success) return [];
   return doc.data.plans.flatMap((item) => {
     const parsed = SavedPlan.safeParse(item);
-    return parsed.success ? [parsed.data] : [];
+    if (!parsed.success) return [];
+    // Browser storage can be edited by anyone with access to the page (or by a script on another
+    // page of the same origin), so what comes back is cleaned like any other untrusted text.
+    const plan = parsePlan(parsed.data.plan);
+    return plan ? [{ ...parsed.data, plan }] : [];
   });
 }
 
