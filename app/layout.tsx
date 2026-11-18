@@ -6,10 +6,22 @@ import './globals.css';
 
 const sans = Bricolage_Grotesque({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
 
+const DESCRIPTION =
+  'Study plans you can check off. Create a 1 to 30 day plan on any subject, with a progress checklist. / Planos de estudo de 1 a 30 dias com checklist de progresso.';
+
 export const metadata: Metadata = {
+  metadataBase: new URL('https://studyplan.aquifunciona.dev.br'),
   title: 'StudyPlan AI',
-  description:
-    'Study plans you can check off. Create a 1 to 30 day plan on any subject, with a progress checklist. / Planos de estudo de 1 a 30 dias com checklist de progresso.',
+  description: DESCRIPTION,
+  openGraph: {
+    type: 'website',
+    siteName: 'StudyPlan AI',
+    title: 'StudyPlan AI',
+    description: DESCRIPTION,
+    locale: 'pt_BR',
+    alternateLocale: ['en_US'],
+  },
+  twitter: { card: 'summary_large_image', title: 'StudyPlan AI', description: DESCRIPTION },
 };
 
 // Runs before first paint so a saved theme choice never flashes the wrong colors.
