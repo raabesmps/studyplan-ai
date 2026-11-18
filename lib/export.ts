@@ -25,32 +25,38 @@ const LABELS = {
 // --- Markdown ---
 
 /**
+ * Escapes what could turn plain text into a link, an image or code when the file is opened in a
+ * Markdown viewer. Plan texts are already stripped of HTML (see sanitize.ts).
+ */
+const md = (text: string): string => text.replace(/[\\[\]`]/g, '\\$&');
+
+/**
  * Pure: turns a validated Plan into markdown. Exercises become a task list, checked when
- * `completed` says so. Does not escape HTML (renderers must).
+ * `completed` says so. Texts are escaped so they stay text in a viewer.
  */
 export function planToMarkdown(plan: Plan, language: Language = 'pt', completed: Completed = {}): string {
   const t = LABELS[language];
 
   const days = plan.days.map((d) => {
     const lines = [
-      `## ${t.day} ${d.day}: ${d.title}`,
+      `## ${t.day} ${d.day}: ${md(d.title)}`,
       '',
-      `**${t.objective}:** ${d.objective}`,
+      `**${t.objective}:** ${md(d.objective)}`,
       '',
       `**${t.topics}:**`,
-      ...d.topics.map((x) => `- ${x}`),
+      ...d.topics.map((x) => `- ${md(x)}`),
       '',
       `**${t.exercises}:**`,
-      ...d.exercises.map((x, i) => `- [${isExerciseDone(completed, d, i) ? 'x' : ' '}] ${x}`),
+      ...d.exercises.map((x, i) => `- [${isExerciseDone(completed, d, i) ? 'x' : ' '}] ${md(x)}`),
     ];
     if (d.resources.length > 0) {
-      lines.push('', `**${t.search}:**`, ...d.resources.map((r) => `- ${r.title}: ${r.query}`));
+      lines.push('', `**${t.search}:**`, ...d.resources.map((r) => `- ${md(r.title)}: ${md(r.query)}`));
     }
     lines.push('', `**${t.minutes}:** ${d.minutes} ${t.min}`);
     return lines.join('\n');
   });
 
-  return [`# ${plan.subject}`, ...days].join('\n\n') + '\n';
+  return [`# ${md(plan.subject)}`, ...days].join('\n\n') + '\n';
 }
 
 // --- iCalendar (RFC 5545) ---

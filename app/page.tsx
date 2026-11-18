@@ -11,7 +11,7 @@ import StudyPlanDisplay from '@/components/StudyPlanDisplay';
 import StudyPlanForm from '@/components/StudyPlanForm';
 import { logger } from '@/lib/logger';
 import { addPlan, removeLegacyPlan, removePlan, type SavedPlan } from '@/lib/plans-store';
-import { Plan, type PlanRequest } from '@/lib/schema';
+import { parsePlan, type PlanRequest } from '@/lib/schema';
 import { NDJSON_CONTENT_TYPE, readEvents, type DemoReason } from '@/lib/stream';
 import { useT } from '@/lib/use-locale';
 import { usePlans } from '@/lib/use-plans';
@@ -127,8 +127,9 @@ export default function Home() {
         planPayload = data?.plan;
       }
 
-      const parsed = Plan.safeParse(planPayload);
-      if (!parsed.success) throw new GenerateError('INVALID_RESPONSE');
+      // Cleaned as well as validated: the plan came over the network.
+      const cleanPlan = parsePlan(planPayload);
+      if (!cleanPlan) throw new GenerateError('INVALID_RESPONSE');
 
       const now = new Date().toISOString();
       const saved: SavedPlan = {
@@ -137,7 +138,7 @@ export default function Home() {
         updatedAt: now,
         hoursPerDay: input.hoursPerDay,
         language: input.language,
-        plan: parsed.data,
+        plan: cleanPlan,
         completed: {},
       };
       addPlan(saved);

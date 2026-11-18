@@ -13,6 +13,7 @@
 //   claude-credit    (Claude) "credit balance is too low" (HTTP 400); Gemini answers normally
 //   claude-401       (Claude) invalid key; Gemini answers normally
 //   claude-midstream (Claude) fails in the middle of the stream; Gemini answers normally
+//   xss              (both) the plan's texts are full of markup, scripts and hidden characters
 //   bothdown         Claude answers 529 and both Gemini models answer 500
 //
 // Claude is served at POST /v1/messages and Gemini at POST /<anything>/models/<model>:streamGenerateContent.
@@ -43,6 +44,18 @@ function buildPlan(days, subject) {
       minutes: 90,
     })),
   };
+}
+
+/** What a compromised or prompt-injected model could write into a plan. */
+function poison(plan) {
+  const [first, second] = plan.days;
+  // The invisible characters are written as escapes so they stay visible in this file.
+  first.title = '<img src=x onerror="window.__xss = 1">Fundamentos‮';
+  first.objective = 'Aprender <b>bem</b> <script>window.__xss = 2</script>com calma';
+  first.topics = ['<iframe src="https://evil.test"></iframe>Tópico seguro', 'Link [clique](javascript:window.__xss=3)'];
+  first.exercises = ['<svg onload="window.__xss = 4">Exercício​ limpo'];
+  if (second) second.resources = [{ title: '<a href="javascript:window.__xss=5">Guia</a>', query: 'sql\r\njoins' }];
+  return plan;
 }
 
 /** The JSON split into a header and one piece per day, so the app can see progress as days start. */
@@ -99,7 +112,7 @@ async function handleClaude(req, res) {
     return fail(400, 'invalid_request_error', 'Your credit balance is too low to access the Anthropic API.');
   }
 
-  const plan = buildPlan(days, subject);
+  const plan = scenario === 'xss' ? poison(buildPlan(days, subject)) : buildPlan(days, subject);
   const parts = pieces(plan);
   res.writeHead(200, { 'Content-Type': 'text/event-stream' });
   claudeEvent(res, 'message_start', {
@@ -244,7 +257,7 @@ const server = http.createServer(async (req, res) => {
   });
 
   const isPrimary = model === 'gemini-3-flash-preview';
-  const plan = buildPlan(days, subject);
+  const plan = scenario === 'xss' ? poison(buildPlan(days, subject)) : buildPlan(days, subject);
   const parts = pieces(plan);
   const finish = () => {
     finished = true;

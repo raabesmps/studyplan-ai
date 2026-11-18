@@ -15,12 +15,16 @@ export function buildCsp(nonce: string, isDev: boolean): string {
     `img-src 'self' data: blob:`,
     `font-src 'self'`,
     `connect-src 'self'`,
+    `media-src 'none'`,
+    `frame-src 'none'`,
+    `manifest-src 'self'`,
     `object-src 'none'`,
     `base-uri 'self'`,
     `form-action 'self'`,
     `frame-ancestors 'none'`,
   ];
-  if (!isDev) directives.push('upgrade-insecure-requests');
+  // Dev tooling (HMR) may use workers; production has none.
+  if (!isDev) directives.push(`worker-src 'none'`, 'upgrade-insecure-requests');
   return directives.join('; ');
 }
 

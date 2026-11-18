@@ -5,7 +5,9 @@ import { getEnv, rateLimitConfigured, type Env } from '@/lib/env';
 import { AppError, toErrorBody } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { assertSameOriginJson } from '@/lib/request-guard';
 import { readJsonBody } from '@/lib/request-body';
+import { cleanText } from '@/lib/sanitize';
 import { PlanRequest } from '@/lib/schema';
 import { NDJSON_CONTENT_TYPE, encodeEvent, type DemoReason, type StreamEvent } from '@/lib/stream';
 
@@ -16,7 +18,7 @@ export const maxDuration = 60;
 function jsonError(error: unknown): NextResponse {
   logger.error('Failed to start plan generation:', error);
   const { status, body } = toErrorBody(error);
-  const headers: HeadersInit = {};
+  const headers: HeadersInit = { 'Cache-Control': 'no-store' };
   if (body.error.retryAfter !== undefined) headers['Retry-After'] = String(body.error.retryAfter);
   return NextResponse.json(body, { status, headers });
 }
@@ -42,6 +44,7 @@ export async function POST(request: NextRequest) {
   let input: PlanRequest;
   let env: Env;
   try {
+    assertSameOriginJson(request);
     const payload = await readJsonBody(request);
 
     const parsed = PlanRequest.safeParse(payload);
@@ -52,7 +55,10 @@ export async function POST(request: NextRequest) {
       const message = issue && issue.path.length > 0 ? issue.message : 'Requisição inválida.';
       throw new AppError('INVALID_REQUEST', message, 400);
     }
-    input = parsed.data;
+    // The subject goes into a prompt, into the plan and into export file names: clean it once, here.
+    const subject = cleanText(parsed.data.subject);
+    if (!subject) throw new AppError('INVALID_REQUEST', 'Informe o assunto.', 400);
+    input = { ...parsed.data, subject };
     // Fail fast (HTTP 500) on missing configuration instead of inside an already-open 200 stream.
     env = getEnv();
   } catch (error) {
