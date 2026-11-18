@@ -160,13 +160,18 @@ describe('POST /api/generate-plan: switches', () => {
     vi.stubEnv('UPSTASH_REDIS_REST_URL', '');
     vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', '');
     for (let i = 0; i < 8; i++) expect((await generate()).response.status).toBe(200);
-    expect(redis.requests).toHaveLength(0);
+    // No counters are touched (usage is still written down: that is monitoring, not limiting).
+    const commands = redis.requests.flatMap((request) => request.commands.map((command) => command[0]));
+    expect(commands).not.toContain('INCR');
   });
 
   it('skips the limiter when RATE_LIMIT_DISABLED=true', async () => {
     vi.stubEnv('RATE_LIMIT_DISABLED', 'true');
     for (let i = 0; i < 8; i++) expect((await generate()).response.status).toBe(200);
-    expect(redis.requests).toHaveLength(0);
+    // No counters are touched (usage is still written down: that is monitoring, not limiting).
+    const commands = redis.requests.flatMap((request) => request.commands.map((command) => command[0]));
+    expect(commands).not.toContain('INCR');
+    expect(commands).toContain('HINCRBY');
   });
 
   it('demo mode serves samples without any AI or Redis call, and needs no API key', async () => {

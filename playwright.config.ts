@@ -46,6 +46,10 @@ export default defineConfig({
         ANTHROPIC_API_KEY: '',
         // Every test shares one IP, so the limiter would block the suite; it has its own instance below.
         RATE_LIMIT_DISABLED: 'true',
+        // Next loads .env.local even for `next start`: make sure a developer's real keys never reach these tests.
+        UPSTASH_REDIS_REST_URL: '',
+        UPSTASH_REDIS_REST_TOKEN: '',
+        STATUS_TOKEN: '',
       },
     },
     {
@@ -61,6 +65,10 @@ export default defineConfig({
         GEMINI_API_KEY: 'e2e-test-key',
         GEMINI_API_BASE_URL: `http://localhost:${FAKE_GEMINI_PORT}/v1beta/models`,
         RATE_LIMIT_DISABLED: 'true',
+        // Next loads .env.local even for `next start`: make sure a developer's real keys never reach these tests.
+        UPSTASH_REDIS_REST_URL: '',
+        UPSTASH_REDIS_REST_TOKEN: '',
+        STATUS_TOKEN: '',
       },
     },
     {
@@ -74,11 +82,16 @@ export default defineConfig({
         AI_PROVIDER: 'gemini',
         GEMINI_API_KEY: 'e2e-test-key',
         GEMINI_API_BASE_URL: `http://localhost:${FAKE_GEMINI_PORT}/v1beta/models`,
-        ANTHROPIC_API_KEY: '',
+        // Claude is configured too (as the failover) so the status page has all three services to check.
+        ANTHROPIC_API_KEY: 'e2e-test-claude-key',
+        ANTHROPIC_BASE_URL: `http://localhost:${FAKE_GEMINI_PORT}`,
         UPSTASH_REDIS_REST_URL: `http://localhost:${FAKE_GEMINI_PORT}`,
         UPSTASH_REDIS_REST_TOKEN: 'e2e-upstash-token',
         RATE_LIMIT_MAX: '3',
         DAILY_LIMIT: '1000',
+        // The owner's part of the status page, and no caching so a simulated outage shows at once.
+        STATUS_TOKEN: 'e2e-owner-token-0123456789',
+        STATUS_CACHE_SECONDS: '0',
       },
     },
   ],

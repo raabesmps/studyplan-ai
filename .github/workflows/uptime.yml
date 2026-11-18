@@ -1,0 +1,49 @@
+name: Uptime
+
+# Pings the live site every 10 minutes. A failed run is how GitHub tells the owner (by email, with the
+# default notification settings) that the site or one of the APIs it depends on is down.
+# GitHub pauses scheduled workflows in a repository that has had no activity for 60 days.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Site and APIs are up
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SITE: https://studyplan.aquifunciona.dev.br
+    steps:
+      - name: The app answers
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 3 --retry-delay 5 --retry-all-errors --max-time 20 "$SITE/api/health" \
+            | jq -e '.status == "ok"'
+
+      - name: The services it depends on answer
+        run: |
+          set -euo pipefail
+          status=$(curl --fail --silent --show-error --retry 2 --retry-delay 5 --retry-all-errors --max-time 30 "$SITE/api/status")
+          echo "$status" | jq -c '{site, services: [.services[] | {id, status, latencyMs}], dailyLimitReached}'
+
+          echo "$status" | jq -e '.site.status == "up"' > /dev/null
+
+          # "degraded" (a provider rate limiting us) and "not_configured" are not outages; "down" is.
+          down=$(echo "$status" | jq -r '[.services[] | select(.status == "down") | .id] | join(", ")')
+          if [ -n "$down" ]; then
+            echo "::error title=Service down::These services are down: $down"
+            exit 1
+          fi
+
+          if [ "$(echo "$status" | jq -r '.dailyLimitReached')" = "true" ]; then
+            echo "::warning title=Daily budget spent::Visitors are getting sample plans until midnight UTC"
+          fi

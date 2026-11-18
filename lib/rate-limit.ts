@@ -1,34 +1,10 @@
 import { AppError } from './errors';
+import { clientIp } from './client-ip';
 import type { Env } from './env';
+import { pipeline } from './upstash';
 
 /** What the limiter decided. `daily` means the app-wide cap is used up; `ip` means this visitor's quota is. */
 export type RateLimitResult = { ok: true } | { ok: false; scope: 'ip' | 'daily'; retryAfter: number };
-
-type RedisCommand = (string | number)[];
-
-const REQUEST_TIMEOUT_MS = 2500;
-
-/**
- * Runs commands as one Upstash REST pipeline (a single HTTP round trip) and returns each result.
- * Throws on any transport, auth or command error, so callers can fail closed.
- */
-async function pipeline(env: Env, commands: RedisCommand[]): Promise<unknown[]> {
-  const response = await fetch(`${env.UPSTASH_REDIS_REST_URL!.replace(/\/+$/, '')}/pipeline`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(commands),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    cache: 'no-store',
-  });
-  if (!response.ok) throw new Error(`Upstash answered HTTP ${response.status}`);
-
-  const results: unknown = await response.json();
-  if (!Array.isArray(results) || results.length !== commands.length) throw new Error('Unexpected Upstash response');
-  return results.map((entry: { result?: unknown; error?: string }) => {
-    if (entry.error) throw new Error(`Upstash command failed: ${entry.error}`);
-    return entry.result;
-  });
-}
 
 /**
  * Fixed-window counter: INCR the key and make sure it expires. The window starts at the first hit.
@@ -53,8 +29,7 @@ async function hit(env: Env, key: string, windowSeconds: number): Promise<{ coun
 
 /** The first hop's address, hashed so the store never holds a raw IP. */
 export async function visitorKey(headers: Headers): Promise<string> {
-  const forwarded = headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  const ip = forwarded || headers.get('x-real-ip')?.trim() || 'unknown';
+  const ip = clientIp(headers);
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ip));
   return Array.from(new Uint8Array(digest).slice(0, 12), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }

@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import type { Env } from '../env';
-import { AppError } from '../errors';
+import { AppError, type FailureReason } from '../errors';
 import { logger } from '../logger';
 import { Plan } from '../schema';
 import type { AiProvider } from './types';
@@ -21,6 +21,21 @@ function retryAfterSeconds(error: unknown): number | undefined {
   const headers = (error as { headers?: { get?: (name: string) => string | null | undefined } }).headers;
   const value = Number(headers?.get?.('retry-after'));
   return Number.isFinite(value) && value > 0 ? Math.ceil(value) : undefined;
+}
+
+/** Operator-facing cause of a Claude failure, from the status code and, for billing, the message. */
+function reasonOf(error: unknown): FailureReason {
+  if (error instanceof Anthropic.RateLimitError) return 'rate_limit';
+  if (error instanceof Anthropic.APIConnectionTimeoutError) return 'timeout';
+  if (error instanceof Anthropic.APIError) {
+    const status = error.status ?? 0;
+    if (status === 401 || status === 403) return 'auth';
+    if (status === 400 && /credit balance|billing/i.test(error.message)) return 'billing';
+    if (status === 529 || status >= 500) return 'overloaded';
+    return 'unknown';
+  }
+  const name = (error as { name?: string })?.name;
+  return name === 'TimeoutError' || name === 'AbortError' ? 'timeout' : 'unknown';
 }
 
 /**
@@ -46,16 +61,19 @@ function toAppError(error: unknown, signal?: AbortSignal): unknown {
       'RATE_LIMITED',
       'Muitas requisições ao serviço de IA. Aguarde um pouco e tente de novo.',
       429,
-      { cause: error, retryAfter: retryAfterSeconds(error) }
+      { cause: error, retryAfter: retryAfterSeconds(error), reason: 'rate_limit' }
     );
   }
-  return new AppError('UPSTREAM_FAILED', 'O serviço de IA não respondeu. Tente novamente.', 502, { cause: error });
+  return new AppError('UPSTREAM_FAILED', 'O serviço de IA não respondeu. Tente novamente.', 502, {
+    cause: error,
+    reason: reasonOf(error),
+  });
 }
 
 export function createClaudeProvider(env: Env): AiProvider {
   return {
     name: 'claude',
-    async stream({ prompt, signal, timeoutMs, onText }) {
+    async stream({ prompt, signal, timeoutMs, onText, onUsage }) {
       logger.info(`Calling Claude model ${env.ANTHROPIC_MODEL}`);
 
       // Retries are ours to decide (failover), so the SDK's built-in ones are off: one logical call, one request.
@@ -81,6 +99,7 @@ export function createClaudeProvider(env: Env): AiProvider {
           }
         }
         const final = await stream.finalMessage();
+        onUsage?.({ inputTokens: final.usage.input_tokens, outputTokens: final.usage.output_tokens });
         if (final.stop_reason === 'refusal') {
           logger.warn('Claude declined the request:', final.stop_details);
           throw new AppError('INVALID_RESPONSE', 'A IA não pôde gerar este plano. Tente outro assunto.', 502);

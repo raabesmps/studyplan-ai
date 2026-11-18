@@ -6,23 +6,32 @@ export type ErrorCode =
   | 'CONFIG_ERROR'
   | 'INTERNAL';
 
+/**
+ * Why an AI provider failed, for operators only (the status page). Never sent to visitors, because
+ * some of these ("billing") describe the account behind the app.
+ */
+export type FailureReason = 'billing' | 'auth' | 'rate_limit' | 'overloaded' | 'timeout' | 'invalid_response' | 'unknown';
+
 export class AppError extends Error {
   readonly code: ErrorCode;
   readonly status: number;
   /** Seconds the caller should wait before retrying (rate limiting). */
   readonly retryAfter?: number;
+  /** Operator-facing cause of an upstream failure; not part of the public error body. */
+  readonly reason?: FailureReason;
 
   constructor(
     code: ErrorCode,
     message: string,
     status: number,
-    options?: { cause?: unknown; retryAfter?: number }
+    options?: { cause?: unknown; retryAfter?: number; reason?: FailureReason }
   ) {
     super(message, { cause: options?.cause });
     this.name = 'AppError';
     this.code = code;
     this.status = status;
     this.retryAfter = options?.retryAfter;
+    this.reason = options?.reason;
   }
 }
 
@@ -43,4 +52,14 @@ export function toErrorBody(err: unknown): { status: number; body: ErrorBody } {
     status: 500,
     body: { error: { code: 'INTERNAL', message: INTERNAL_MESSAGE } },
   };
+}
+
+/** The operator-facing reason of any failure, with a sensible default per error code. */
+export function failureReason(error: unknown): FailureReason {
+  if (error instanceof AppError) {
+    if (error.reason) return error.reason;
+    if (error.code === 'RATE_LIMITED') return 'rate_limit';
+    if (error.code === 'INVALID_RESPONSE') return 'invalid_response';
+  }
+  return 'unknown';
 }

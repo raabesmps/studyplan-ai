@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { jsonError as respondWithError } from '@/lib/api-response';
 import { generateStudyPlan } from '@/lib/ai/generate';
+import { clientIp } from '@/lib/client-ip';
 import { pickDemoPlan } from '@/lib/demo';
 import { getEnv, rateLimitConfigured, type Env } from '@/lib/env';
-import { AppError, toErrorBody } from '@/lib/errors';
+import { AppError, toErrorBody, type FailureReason } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { assertSameOriginJson } from '@/lib/request-guard';
@@ -10,18 +12,14 @@ import { readJsonBody } from '@/lib/request-body';
 import { cleanText } from '@/lib/sanitize';
 import { PlanRequest } from '@/lib/schema';
 import { NDJSON_CONTENT_TYPE, encodeEvent, type DemoReason, type StreamEvent } from '@/lib/stream';
+import { recordUsage, type UsageEvent } from '@/lib/usage';
+import type { ProviderName } from '@/lib/env';
 
 // Generation takes 5-30s; give the platform room (Vercel reads this).
 export const maxDuration = 60;
 
 /** Errors found before streaming starts (bad input, missing config) are plain JSON with a status. */
-function jsonError(error: unknown): NextResponse {
-  logger.error('Failed to start plan generation:', error);
-  const { status, body } = toErrorBody(error);
-  const headers: HeadersInit = { 'Cache-Control': 'no-store' };
-  if (body.error.retryAfter !== undefined) headers['Retry-After'] = String(body.error.retryAfter);
-  return NextResponse.json(body, { status, headers });
-}
+const jsonError = (error: unknown) => respondWithError(error, 'Failed to start plan generation:');
 
 const STREAM_HEADERS = {
   'Content-Type': `${NDJSON_CONTENT_TYPE}; charset=utf-8`,
@@ -43,6 +41,7 @@ const limiterActive = (env: Env) => rateLimitConfigured(env) && env.RATE_LIMIT_D
 export async function POST(request: NextRequest) {
   let input: PlanRequest;
   let env: Env;
+  const ip = clientIp(request.headers);
   try {
     assertSameOriginJson(request);
     const payload = await readJsonBody(request);
@@ -72,7 +71,11 @@ export async function POST(request: NextRequest) {
       const verdict = await checkRateLimit(env, request.headers);
       if (!verdict.ok) {
         // The visitor's own quota is an error; the app-wide budget being spent just means a sample plan.
-        if (verdict.scope === 'daily') return demoResponse(input, 'daily-limit');
+        if (verdict.scope === 'daily') {
+          await recordUsage(env, { ip, outcome: 'sample' });
+          return demoResponse(input, 'daily-limit');
+        }
+        await recordUsage(env, { ip, outcome: 'rate_limited' });
         throw new AppError('RATE_LIMITED', 'Muitas tentativas em pouco tempo.', 429, { retryAfter: verdict.retryAfter });
       }
     } catch (error) {
@@ -96,6 +99,13 @@ export async function POST(request: NextRequest) {
         }
       };
 
+      // What this request used and how the providers behaved, written to the usage log at the end.
+      const usage: UsageEvent = { ip, outcome: 'error', tokens: {}, failures: [], failovers: 0 };
+      const addTokens = (provider: ProviderName, tokens: { inputTokens: number; outputTokens: number }) => {
+        const soFar = usage.tokens![provider] ?? { input: 0, output: 0 };
+        usage.tokens![provider] = { input: soFar.input + tokens.inputTokens, output: soFar.output + tokens.outputTokens };
+      };
+
       try {
         const plan = await generateStudyPlan(input, {
           // request.signal aborts when the visitor cancels or disconnects, which also stops the AI call.
@@ -103,16 +113,28 @@ export async function POST(request: NextRequest) {
           onProgress: (day, total) => send({ type: 'progress', day, total }),
           onRetry: () => send({ type: 'retry' }),
           onSwitch: ({ from, to }) => send({ type: 'switch', from, to }),
+          onUsage: addTokens,
+          onProviderFailure: (provider: ProviderName, reason: FailureReason) => {
+            usage.failures!.push({ provider, reason });
+          },
+          onSuccess: (provider) => (usage.provider = provider),
         });
+        usage.outcome = 'plan';
         send({ type: 'plan', plan });
       } catch (error) {
         if (request.signal.aborted) {
+          usage.outcome = 'cancelled';
           logger.info('Generation cancelled by the client');
         } else {
           logger.error('Failed to generate plan:', error);
           send({ type: 'error', ...toErrorBody(error).body });
         }
       } finally {
+        // A failure is a failover when another provider took over; the last one has nobody after it.
+        const failed = usage.failures!.length;
+        usage.failovers = usage.outcome === 'plan' ? failed : Math.max(0, failed - 1);
+        // Before closing: the platform may stop the function once the response has ended.
+        await recordUsage(env, usage);
         try {
           controller.close();
         } catch {
