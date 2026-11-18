@@ -11,6 +11,8 @@
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
 [![Google Gemini](https://img.shields.io/badge/Gemini_AI-8B5CF6?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev)
 
+[![CI](https://github.com/raabesmps/studyplan-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/raabesmps/studyplan-ai/actions/workflows/ci.yml)
+
 </div>
 
 ---

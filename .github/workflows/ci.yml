@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# A newer push to the same branch makes an older, still-running check pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Lint, types, unit tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # What ships to users: no known high-severity vulnerability in the runtime dependencies. Dev tooling
+      # is left out on purpose: its current high advisory (picomatch ReDoS) has no patched release yet and
+      # only matters to someone feeding hostile glob patterns to the build tools.
+      - run: npm audit --omit=dev --audit-level=high
+
+      - run: npm run lint
+
+      - run: npm run typecheck
+
+      # Runs offline: the AI APIs are mocked, so no API key is needed (or provided) here.
+      - run: npm run test:coverage
+
+      # The build must work without any key too (configuration is read lazily).
+      - run: npm run build
+
+  e2e:
+    name: End-to-end (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install the browser
+        run: npx playwright install --with-deps chromium
+
+      # Builds the app and runs it against a local fake of the Claude and Gemini APIs.
+      - run: npm run test:e2e
+
+      - name: Keep the report when something fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
