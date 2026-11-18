@@ -184,6 +184,22 @@ test.describe('days as an accordion', () => {
     await expect(page.getByRole('button', { name: /^Dia 1:/ })).toHaveAttribute('aria-expanded', 'true');
   });
 
+  for (const width of [320, 360, 390, 768]) {
+    test(`the day titles are readable, not squeezed beside the check, at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto('/');
+      await generate(page, subject(), 3);
+      await expect(page.locator('article')).toHaveCount(3);
+
+      for (const day of [1, 2, 3]) {
+        const box = await page.getByRole('button', { name: new RegExp(`^Dia ${day}:`) }).boundingBox();
+        // A title squeezed to a few pixels wraps one letter per line and gets very tall.
+        expect(box!.width, `day ${day} width`).toBeGreaterThan(Math.min(180, width - 120));
+        expect(box!.height, `day ${day} height`).toBeLessThan(110);
+      }
+    });
+  }
+
   test('prints every day open', async ({ page }) => {
     await page.goto('/');
     await generate(page, subject(), 3);

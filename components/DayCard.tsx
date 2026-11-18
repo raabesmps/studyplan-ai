@@ -71,7 +71,8 @@ export default function DayCard({
         className={`mb-5 rounded-xl border bg-surface ${complete ? 'border-ink' : 'border-line'}`}
       >
         <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 p-4 sm:px-6 sm:py-5">
-          <h3 id={titleId} className="min-w-0 flex-1 text-xl font-bold leading-snug">
+          {/* The title wants at least 12rem; when the "done" check does not fit beside it, the check wraps below. */}
+          <h3 id={titleId} className="min-w-0 flex-[1_1_12rem] text-xl font-bold leading-snug">
             <button
               type="button"
               onClick={onToggleOpen}
