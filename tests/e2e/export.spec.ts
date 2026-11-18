@@ -19,6 +19,8 @@ test('downloads a markdown file that mirrors the progress', async ({ page }) => 
   const day1 = page.getByRole('region', { name: 'Exercícios do dia 1' }).getByRole('checkbox');
   await day1.nth(0).check();
   await day1.nth(1).check();
+  // Only day 1 starts open: open day 3 to tick one of its exercises.
+  await page.getByRole('button', { name: /^Dia 3:/ }).click();
   await page.getByRole('region', { name: 'Exercícios do dia 3' }).getByRole('checkbox').first().check();
 
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Baixar .md' }).click()]);

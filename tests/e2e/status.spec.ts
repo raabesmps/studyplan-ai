@@ -59,7 +59,7 @@ test.describe('public status', () => {
 
   test('is linked from the home page, which also says how long IPs are kept', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByText(/endereço IP de quem gera planos fica guardado por 35 dias/)).toBeVisible();
+    await expect(page.getByText(/seu IP é guardado só como um código embaralhado \(hash\), por no máximo 1 hora/)).toBeVisible();
     await page.getByRole('link', { name: 'Status do serviço' }).click();
     await expect(page).toHaveURL(/\/status$/);
   });
@@ -103,7 +103,7 @@ test.describe('owner panel', () => {
     await expect(page.getByText('Muitas tentativas erradas. Tente de novo mais tarde.')).toBeVisible();
   });
 
-  test('shows requests, plans, spend and the IP that asked, after a plan is generated', async ({ page, request }) => {
+  test('counts the request and shows the estimated spend, and no IP anywhere', async ({ page, request }) => {
     const ip = `198.51.100.${100 + Math.floor(Math.random() * 100)}`;
     const subject = `SCENARIO:ok ${randomUUID().slice(0, 8)}`;
     const plan = await request.post('/api/generate-plan', {
@@ -118,16 +118,15 @@ test.describe('owner panel', () => {
     await page.getByRole('button', { name: 'Entrar' }).click();
     await expect(page.getByTestId('owner-data')).toBeVisible();
 
-    const ipRow = page.getByTestId('ip-table').getByRole('row').filter({ hasText: ip });
-    await expect(ipRow).toHaveCount(1);
-    await expect(ipRow.getByRole('cell').nth(0)).toHaveText('1'); // requests
-    await expect(ipRow.getByRole('cell').nth(1)).toHaveText('1'); // plans
-
     const daily = page.getByRole('table', { name: 'Por dia' });
     await expect(daily.getByRole('rowheader', { name: today() })).toBeVisible();
     await expect(page.getByText(/de 1000 planos do teto diário/)).toBeVisible();
     await expect(page.getByTestId('spend-today')).toContainText('US$');
     await expect(page.getByText(/Gemini é contado como gratuito/)).toBeVisible();
+
+    // Only counts: the address that asked is nowhere on the page, and the table is gone.
+    await expect(page.getByTestId('ip-table')).toHaveCount(0);
+    expect(await page.locator('body').innerText()).not.toContain(ip);
   });
 
   test('records a Claude failure with its reason and the switch to Gemini', async ({ page, request }) => {

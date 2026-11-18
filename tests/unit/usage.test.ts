@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnv } from '@/lib/env';
 import { estimateCost } from '@/lib/pricing';
-import { RETENTION_DAYS, lastDays, readDays, readHealth, readIps, recordUsage } from '@/lib/usage';
+import { RETENTION_DAYS, lastDays, readDays, readHealth, recordUsage } from '@/lib/usage';
 import { fakeUpstash } from '../fake-upstash';
 
 let redis: ReturnType<typeof fakeUpstash>;
@@ -45,7 +45,6 @@ describe('estimateCost', () => {
 describe('recordUsage', () => {
   it('counts a delivered plan per day, per provider, with its tokens', async () => {
     await record({
-      ip: '203.0.113.7',
       outcome: 'plan',
       provider: 'claude',
       tokens: { claude: { input: 600, output: 4000 } },
@@ -58,8 +57,6 @@ describe('recordUsage', () => {
       claude_in: 600,
       claude_out: 4000,
     });
-    expect(redis.hash(`studyplan:ips:${DAY}`)).toEqual({ '203.0.113.7': 1 });
-    expect(redis.hash(`studyplan:ipplans:${DAY}`)).toEqual({ '203.0.113.7': 1 });
     expect(redis.string('studyplan:ok:claude')).toBe(redis.now.toISOString());
   });
 
@@ -69,24 +66,20 @@ describe('recordUsage', () => {
     ['error', 'errors'],
     ['cancelled', 'cancelled'],
   ] as const)('counts a "%s" request under %s and not as a plan', async (outcome, field) => {
-    await record({ ip: '198.51.100.1', outcome });
+    await record({ outcome });
     expect(redis.hash(`studyplan:stats:${DAY}`)).toEqual({ requests: 1, [field]: 1 });
-    expect(redis.hash(`studyplan:ipplans:${DAY}`)).toEqual({});
-    expect(redis.hash(`studyplan:ips:${DAY}`)).toEqual({ '198.51.100.1': 1 });
   });
 
-  it('accumulates across requests and keeps each IP apart', async () => {
-    await record({ ip: 'a', outcome: 'plan', provider: 'gemini', tokens: { gemini: { input: 10, output: 20 } } });
-    await record({ ip: 'a', outcome: 'plan', provider: 'gemini', tokens: { gemini: { input: 10, output: 20 } } });
-    await record({ ip: 'b', outcome: 'rate_limited' });
+  it('accumulates across requests', async () => {
+    await record({ outcome: 'plan', provider: 'gemini', tokens: { gemini: { input: 10, output: 20 } } });
+    await record({ outcome: 'plan', provider: 'gemini', tokens: { gemini: { input: 10, output: 20 } } });
+    await record({ outcome: 'rate_limited' });
 
     expect(redis.hash(`studyplan:stats:${DAY}`)).toMatchObject({ requests: 3, plans: 2, plans_gemini: 2, gemini_in: 20, gemini_out: 40, rate_limited: 1 });
-    expect(redis.hash(`studyplan:ips:${DAY}`)).toEqual({ a: 2, b: 1 });
   });
 
   it('notes failovers, the last failure of each provider and its reason', async () => {
     await record({
-      ip: 'a',
       outcome: 'plan',
       provider: 'gemini',
       failovers: 1,
@@ -98,25 +91,33 @@ describe('recordUsage', () => {
   });
 
   it('expires everything after the retention period', async () => {
-    await record({ ip: 'a', outcome: 'plan', provider: 'claude' });
+    await record({ outcome: 'plan', provider: 'claude' });
     const expiries = redis.requests[0].commands.filter((c) => c[0] === 'EXPIRE');
-    expect(expiries.length).toBeGreaterThanOrEqual(3);
+    expect(expiries.length).toBeGreaterThanOrEqual(1);
     for (const command of expiries) expect(command[2]).toBe(RETENTION_DAYS * 24 * 3600);
 
     redis.advance(RETENTION_DAYS * 24 * 3600 + 1);
-    expect(redis.hash(`studyplan:ips:${DAY}`)).toEqual({}); // the raw IPs are gone
+    expect(redis.hash(`studyplan:stats:${DAY}`)).toEqual({}); // the counters are gone
+  });
+
+  it('writes nothing that identifies a visitor: only counters and provider health', async () => {
+    await record({ outcome: 'plan', provider: 'claude', tokens: { claude: { input: 1, output: 1 } } });
+    await record({ outcome: 'rate_limited' });
+    const keys = [...redis.entries.keys()].sort();
+    expect(keys).toEqual([`studyplan:ok:claude`, `studyplan:stats:${DAY}`]);
+    expect(JSON.stringify(redis.requests)).not.toMatch(/ips|ipplans|x-forwarded|\d+\.\d+\.\d+\.\d+/);
   });
 
   it('does nothing without Upstash', async () => {
     vi.stubEnv('UPSTASH_REDIS_REST_URL', '');
-    await record({ ip: 'a', outcome: 'plan' });
+    await record({ outcome: 'plan' });
     expect(redis.requests).toHaveLength(0);
   });
 
   it('never throws: a failing store is reported and swallowed', async () => {
     const alert = vi.spyOn(console, 'error').mockImplementation(() => {});
     redis.state.failWith = new Response('boom', { status: 500 });
-    await expect(record({ ip: 'a', outcome: 'plan' })).resolves.toBeUndefined();
+    await expect(record({ outcome: 'plan' })).resolves.toBeUndefined();
     expect(alert).toHaveBeenCalledWith(expect.stringContaining('Could not record usage'), expect.any(String));
     alert.mockRestore();
   });
@@ -129,9 +130,9 @@ describe('reading usage', () => {
 
   it('returns per-day statistics with the estimated cost, and the daily counter', async () => {
     const env = getEnv();
-    await record({ ip: 'a', outcome: 'plan', provider: 'claude', tokens: { claude: { input: 1_000_000, output: 1_000_000 } } });
+    await record({ outcome: 'plan', provider: 'claude', tokens: { claude: { input: 1_000_000, output: 1_000_000 } } });
     redis.advance(24 * 3600);
-    await record({ ip: 'b', outcome: 'sample' });
+    await record({ outcome: 'sample' });
     await fetch('https://redis.example.test/pipeline', { method: 'POST', body: JSON.stringify([['INCR', 'studyplan:day:2026-03-11'], ['INCR', 'studyplan:day:2026-03-11']]) });
 
     const { days, usedToday } = await readDays(env, 3, redis.now);
@@ -149,24 +150,9 @@ describe('reading usage', () => {
     expect((await readDays(getEnv(), 0, redis.now)).days).toHaveLength(1);
   });
 
-  it('lists IPs busiest first with the plans each one got', async () => {
-    const env = getEnv();
-    for (let i = 0; i < 3; i++) await record({ ip: '203.0.113.9', outcome: i === 0 ? 'plan' : 'rate_limited', provider: 'claude' });
-    await record({ ip: '198.51.100.2', outcome: 'plan', provider: 'gemini' });
-    await record({ ip: '198.51.100.1', outcome: 'plan', provider: 'gemini' });
-
-    expect(await readIps(env, DAY)).toEqual([
-      { ip: '203.0.113.9', requests: 3, plans: 1 },
-      { ip: '198.51.100.1', requests: 1, plans: 1 },
-      { ip: '198.51.100.2', requests: 1, plans: 1 },
-    ]);
-    expect(await readIps(env, DAY, 1)).toHaveLength(1);
-    expect(await readIps(env, '2026-03-01')).toEqual([]);
-  });
-
   it('reads when each provider last failed and last worked, ignoring values it did not write', async () => {
     const env = getEnv();
-    await record({ ip: 'a', outcome: 'plan', provider: 'gemini', failures: [{ provider: 'claude', reason: 'overloaded' }] });
+    await record({ outcome: 'plan', provider: 'gemini', failures: [{ provider: 'claude', reason: 'overloaded' }] });
     await fetch('https://redis.example.test/pipeline', { method: 'POST', body: JSON.stringify([['SET', 'studyplan:fail:gemini', '{"at":"x","reason":"<script>"}']]) });
 
     const health = await readHealth(env);

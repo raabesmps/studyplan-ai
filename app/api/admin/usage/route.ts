@@ -2,18 +2,15 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { authorizeOwner } from '@/lib/admin-auth';
 import { jsonError } from '@/lib/api-response';
 import { getEnv } from '@/lib/env';
-import { AppError } from '@/lib/errors';
 import { estimateCost } from '@/lib/pricing';
 import { checkServices } from '@/lib/service-status';
-import { RETENTION_DAYS, dayKey, lastDays, readDays, readHealth, readIps } from '@/lib/usage';
+import { RETENTION_DAYS, readDays, readHealth } from '@/lib/usage';
 
 export const dynamic = 'force-dynamic';
 
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
-
 /**
- * The owner's view: requests, plans, errors and estimated spend per day, which IPs asked on a given
- * day, and why each provider last failed. Needs `Authorization: Bearer <STATUS_TOKEN>`.
+ * The owner's view: requests, plans, errors and estimated spend per day, and why each provider last
+ * failed. Nothing in it identifies a visitor. Needs `Authorization: Bearer <STATUS_TOKEN>`.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -23,14 +20,9 @@ export async function GET(request: NextRequest) {
     const params = request.nextUrl.searchParams;
     const now = new Date();
     const days = Math.min(Math.max(Number(params.get('days')) || 14, 1), RETENTION_DAYS);
-    const date = params.get('date') ?? dayKey(now);
-    if (!DATE.test(date) || !lastDays(RETENTION_DAYS, now).includes(date)) {
-      throw new AppError('INVALID_REQUEST', 'Data inválida.', 400);
-    }
 
-    const [usage, ips, health, report] = await Promise.all([
+    const [usage, health, report] = await Promise.all([
       readDays(env, days, now),
-      readIps(env, date),
       readHealth(env),
       checkServices(env, { fresh: params.get('fresh') === '1' }),
     ]);
@@ -54,7 +46,6 @@ export async function GET(request: NextRequest) {
           errors: sum((d) => d.errors),
           costUsd: sum((d) => d.costUsd),
         },
-        ips: { date, rows: ips },
         health,
         checkedAt: report.checkedAt,
         services: report.services,

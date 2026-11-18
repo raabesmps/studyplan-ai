@@ -31,12 +31,12 @@ interface Usage {
   priceKnown: boolean;
   days: DayStats[];
   totals: { requests: number; plans: number; samples: number; rateLimited: number; errors: number; costUsd: number };
-  ips: { date: string; rows: { ip: string; requests: number; plans: number }[] };
   health: Record<ProviderId, { lastFailure: { at: string; reason: Reason } | null; lastSuccess: string | null }>;
   services: { id: 'claude' | 'gemini' | 'redis'; status: ServiceState; latencyMs: number | null; reason: Reason | null }[];
 }
 
 type Problem = 'denied' | 'lockedOut' | 'unavailable' | 'failed';
+type Result = { ok: true; data: Usage } | { ok: false; problem: Problem };
 
 /** Kept for this tab only: closing the tab signs out. */
 const TOKEN_KEY = 'studyplan-ai:owner-token';
@@ -56,13 +56,10 @@ const writeToken = (token: string | null): void => {
   }
 };
 
-type Result = { ok: true; data: Usage } | { ok: false; problem: Problem };
-
 /** Asks the server for the owner's data. Never throws: every outcome is a Result. */
-async function requestUsage(secret: string, day: string | null): Promise<Result> {
+async function requestUsage(secret: string): Promise<Result> {
   try {
-    const query = new URLSearchParams({ days: '14', ...(day ? { date: day } : {}) });
-    const response = await fetch(`/api/admin/usage?${query}`, {
+    const response = await fetch('/api/admin/usage?days=14', {
       headers: { Authorization: `Bearer ${secret}` },
       cache: 'no-store',
     });
@@ -81,12 +78,10 @@ const number = (value: number, locale: string) => new Intl.NumberFormat(locale).
 export default function OwnerPanel() {
   const { t, locale } = useT();
   const intlLocale = locale === 'pt' ? 'pt-BR' : 'en-US';
-  const [token, setToken] = useState('');
   const [draft, setDraft] = useState('');
   const [usage, setUsage] = useState<Usage | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [loading, setLoading] = useState(false);
-  const [date, setDate] = useState<string | null>(null);
   const restored = useRef(false);
   const applyRef = useRef<(result: Result, secret: string) => void>(() => {});
 
@@ -98,22 +93,19 @@ export default function OwnerPanel() {
     if (result.ok) {
       setUsage(result.data);
       setProblem(null);
-      setDate(result.data.ips.date);
-      setToken(secret);
       writeToken(secret);
     } else {
       setProblem(result.problem);
       setUsage(null);
-      setToken('');
       writeToken(null);
     }
     setLoading(false);
   };
 
-  const load = (secret: string, day: string | null) => {
-    setLoading(true);
-    void requestUsage(secret, day).then((result) => apply(result, secret));
-  };
+  // The restore effect runs once; this keeps it calling the current version of apply.
+  useEffect(() => {
+    applyRef.current = apply;
+  });
 
   // Comes back signed in after a reload in the same tab.
   useEffect(() => {
@@ -121,23 +113,20 @@ export default function OwnerPanel() {
     restored.current = true;
     const saved = readToken();
     if (!saved) return;
-    void requestUsage(saved, null).then((result) => applyRef.current(result, saved));
+    void requestUsage(saved).then((result) => applyRef.current(result, saved));
   }, []);
-
-  // The restore effect runs once; this keeps it calling the current version of apply.
-  useEffect(() => {
-    applyRef.current = apply;
-  });
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (draft.trim()) load(draft.trim(), null);
+    const secret = draft.trim();
     setDraft('');
+    if (!secret) return;
+    setLoading(true);
+    void requestUsage(secret).then((result) => apply(result, secret));
   };
 
   const signOut = () => {
     setUsage(null);
-    setToken('');
     setProblem(null);
     writeToken(null);
   };
@@ -241,12 +230,11 @@ export default function OwnerPanel() {
                   <th scope="col" className="px-4 py-2 text-right font-semibold">{t.status.owner.blocked}</th>
                   <th scope="col" className="px-4 py-2 text-right font-semibold">{t.status.owner.errors}</th>
                   <th scope="col" className="px-4 py-2 text-right font-semibold">{t.status.owner.spend}</th>
-                  <th scope="col" className="px-4 py-2 font-semibold"><span className="sr-only">IP</span></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line tabular-nums">
                 {usage.days.map((day) => (
-                  <tr key={day.date} aria-current={day.date === date ? 'true' : undefined} className={day.date === date ? 'bg-[var(--mark-soft)]' : undefined}>
+                  <tr key={day.date}>
                     <th scope="row" className="px-4 py-2 font-semibold">{day.date}</th>
                     <td className="px-4 py-2 text-right">{day.requests}</td>
                     <td className="px-4 py-2 text-right">{day.plansClaude}</td>
@@ -255,16 +243,6 @@ export default function OwnerPanel() {
                     <td className="px-4 py-2 text-right">{day.rateLimited}</td>
                     <td className="px-4 py-2 text-right">{day.errors}</td>
                     <td className="px-4 py-2 text-right">{money(day.costUsd)}</td>
-                    <td className="px-4 py-2 text-right">
-                      <button
-                        type="button"
-                        onClick={() => load(token, day.date)}
-                        disabled={loading || day.date === date}
-                        className="font-semibold text-pen underline underline-offset-2 hover:no-underline disabled:text-muted disabled:no-underline"
-                      >
-                        {t.status.owner.showIps(day.date)}
-                      </button>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -277,40 +255,8 @@ export default function OwnerPanel() {
                   <td className="px-4 py-2 text-right">{usage.totals.rateLimited}</td>
                   <td className="px-4 py-2 text-right">{usage.totals.errors}</td>
                   <td className="px-4 py-2 text-right">{money(usage.totals.costUsd)}</td>
-                  <td />
                 </tr>
               </tfoot>
-            </table>
-          </div>
-
-          <div className="overflow-x-auto rounded-xl border border-line bg-surface">
-            <table className="w-full min-w-[24rem] text-left text-sm" data-testid="ip-table">
-              <caption className="p-4 text-left">
-                <span className="block text-lg font-extrabold">{t.status.owner.ips(usage.ips.date)}</span>
-                <span className="mt-1 block font-normal text-muted">{t.status.owner.ipsHint}</span>
-              </caption>
-              <thead className="border-y border-line text-muted">
-                <tr>
-                  <th scope="col" className="px-4 py-2 font-semibold">{t.status.owner.ip}</th>
-                  <th scope="col" className="px-4 py-2 text-right font-semibold">{t.status.owner.ipRequests}</th>
-                  <th scope="col" className="px-4 py-2 text-right font-semibold">{t.status.owner.ipPlans}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line tabular-nums">
-                {usage.ips.rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="px-4 py-3 text-muted">{t.status.owner.noIps}</td>
-                  </tr>
-                ) : (
-                  usage.ips.rows.map((row) => (
-                    <tr key={row.ip}>
-                      <th scope="row" className="px-4 py-2 font-mono font-semibold">{row.ip}</th>
-                      <td className="px-4 py-2 text-right">{row.requests}</td>
-                      <td className="px-4 py-2 text-right">{row.plans}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
             </table>
           </div>
 

@@ -93,13 +93,14 @@ afterEach(() => {
 });
 
 describe('POST /api/generate-plan: usage is recorded', () => {
-  it('counts a plan from Claude with its tokens and the visitor', async () => {
+  it('counts a plan from Claude with its tokens, and nothing about who asked', async () => {
     queues.claude.push(() => claudeStream(planChunks(makePlan(3))));
     await generate('203.0.113.7');
 
     expect(stats()).toEqual({ requests: 1, plans: 1, plans_claude: 1, claude_in: 10, claude_out: 50 });
-    expect(redis.hash(`studyplan:ips:${DAY}`)).toEqual({ '203.0.113.7': 1 });
-    expect(redis.hash(`studyplan:ipplans:${DAY}`)).toEqual({ '203.0.113.7': 1 });
+    // No address is written to the usage log, in any form.
+    expect([...redis.entries.keys()].some((key) => /ips|ipplans/.test(key))).toBe(false);
+    expect(JSON.stringify(redis.requests.filter((r) => r.commands.some((c) => String(c[1]).includes('stats'))))).not.toContain('203.0.113.7');
     expect(redis.string('studyplan:ok:claude')).not.toBeNull();
   });
 
@@ -142,7 +143,6 @@ describe('POST /api/generate-plan: usage is recorded', () => {
 
     expect(blocked.status).toBe(429);
     expect(stats()).toMatchObject({ requests: 2, plans: 1, rate_limited: 1 });
-    expect(redis.hash(`studyplan:ips:${DAY}`)).toEqual({ '203.0.113.7': 2 });
   });
 
   it('counts a sample plan served because the daily budget is spent', async () => {
@@ -196,7 +196,7 @@ describe('GET /api/status (public)', () => {
     expect(body.services.find((s: { id: string }) => s.id === 'claude').status).toBe('down');
   });
 
-  it('shows only state and latency: no reasons, keys, counts, spend or IPs', async () => {
+  it('shows only state and latency: no reasons, keys, counts or spend', async () => {
     await generate('203.0.113.77');
     state.claudeModels = 401;
     resetServiceCache();
@@ -244,7 +244,7 @@ describe('GET /api/admin/usage (owner)', () => {
     expect(locked.headers.get('Retry-After')).toBeNull(); // the right token is only told to wait, with no hint of a counter
   });
 
-  it('returns per-day statistics, totals, the estimated spend and the IPs of the day', async () => {
+  it('returns per-day statistics, totals and the estimated spend', async () => {
     queues.claude.push(() => claudeStream(planChunks(makePlan(3))), () => claudeStream(planChunks(makePlan(3))));
     await generate('203.0.113.7');
     await generate('203.0.113.7');
@@ -266,11 +266,6 @@ describe('GET /api/admin/usage (owner)', () => {
     expect(body.usedToday).toBe(3);
     expect(body.dailyLimit).toBe(200);
 
-    expect(body.ips.date).toBe(DAY);
-    expect(body.ips.rows).toEqual([
-      { ip: '203.0.113.7', requests: 2, plans: 2 },
-      { ip: '198.51.100.5', requests: 1, plans: 1 },
-    ]);
     expect(body.health.claude.lastFailure).toMatchObject({ reason: 'billing' });
     expect(body.health.gemini.lastSuccess).not.toBeNull();
   });
@@ -286,12 +281,17 @@ describe('GET /api/admin/usage (owner)', () => {
     expect(text).not.toMatch(/sk-ant-secret|gemini-secret|upstash-secret|correct-horse/);
   });
 
-  it('lets the owner pick another day, and rejects dates it cannot have', async () => {
-    const ok = await owner('/api/admin/usage?date=2026-03-09');
-    expect((await ok.json()).ips).toEqual({ date: '2026-03-09', rows: [] });
-    for (const bad of ['yesterday', '2026-3-9', '2020-01-01', '2026-03-10;DROP', '../etc']) {
-      expect((await owner(`/api/admin/usage?date=${encodeURIComponent(bad)}`)).status, bad).toBe(400);
-    }
+  it('says nothing about who asked: no IPs, and no per-visitor breakdown', async () => {
+    await generate('203.0.113.7');
+    const body = await (await owner()).json();
+    expect(body.ips).toBeUndefined();
+    expect(JSON.stringify(body)).not.toMatch(/203\.0\.113|198\.51\.100|"ip"/);
+  });
+
+  it('ignores a date parameter now that there is nothing per day to look up', async () => {
+    const response = await owner('/api/admin/usage?date=2026-03-09');
+    expect(response.status).toBe(200);
+    expect((await response.json()).days).toHaveLength(14);
   });
 
   it('keeps the number of days between 1 and the retention period', async () => {
