@@ -38,7 +38,8 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       </head>
       <body>
         {children}
-        <Analytics />
+        {/* Page-view counts by Vercel (no cookies). Only on Vercel: elsewhere /_vercel/insights does not exist. */}
+        {process.env.VERCEL === '1' && <Analytics />}
       </body>
     </html>
   );

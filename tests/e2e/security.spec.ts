@@ -163,3 +163,17 @@ test.describe('a malicious plan from the model', () => {
     expect(markdown).toContain(String.raw`Link \[clique\](javascript:window.__xss=3)`);
   });
 });
+
+test.describe('third-party scripts', () => {
+  test('nothing is loaded from outside the site, and Vercel analytics is absent off Vercel', async ({ page }) => {
+    const requested: string[] = [];
+    page.on('request', (request) => requested.push(request.url()));
+    await page.goto('/');
+    await page.evaluate(() => document.fonts.ready);
+
+    const origin = new URL(page.url()).origin;
+    expect(requested.filter((url) => !url.startsWith(origin) && !url.startsWith('data:') && !url.startsWith('blob:'))).toEqual([]);
+    // The analytics script only exists on Vercel: asking for it elsewhere would be a 404 on every page.
+    expect(requested.some((url) => url.includes('/_vercel/'))).toBe(false);
+  });
+});
